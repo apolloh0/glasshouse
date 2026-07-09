@@ -18,9 +18,11 @@
 //  Pass 2, containers (bottom-up, pre-order over still-unmatched next
 //  nodes): let P = the match of the node's parent (top-level items use the
 //  virtual root, which always "matches" itself — see parentIndex). Among
-//  P's still-unmatched prev-children of the SAME KIND, pick the one with
-//  the closest child index (ties: the earliest). Match just that node (not
-//  its subtree), then recurse normally into children.
+//  P's still-unmatched prev-children of the SAME KIND — and, for `call`
+//  nodes, the SAME CALLEE (D33: a circle->rect rewrite must drop+mint, not
+//  re-badge the call) — pick the one with the closest child index (ties:
+//  the earliest). Match just that node (not its subtree), then recurse
+//  normally into children.
 //
 //  Everything still unmatched in next gets a FRESH stable id; fresh ids are
 //  assigned in pre-order, starting at mintFrom. Prev stable ids that carried
@@ -165,13 +167,17 @@ export function matchPrograms(
       if (nextToPrev.has(id)) continue;
       const prevParent = prevOf(nextShape.parent.get(id)!);
       if (prevParent === undefined) continue; // parent fresh -> node fresh
-      const kind = nextShape.byId.get(id)!.kind;
+      const nextNode = nextShape.byId.get(id)!;
+      const kind = nextNode.kind;
       const myIdx = nextShape.childIdx.get(id)!;
       let best = -1;
       let bestDist = Infinity;
       for (const c of prevShape.childrenOf.get(prevParent) ?? []) {
         if (matchedPrev.has(c)) continue;
-        if (prevShape.byId.get(c)!.kind !== kind) continue;
+        const prevNode = prevShape.byId.get(c)!;
+        if (prevNode.kind !== kind) continue;
+        // D33: a call slot only carries across the same callee
+        if (kind === "call" && (prevNode as { callee: string }).callee !== (nextNode as { callee: string }).callee) continue;
         const dist = Math.abs(prevShape.childIdx.get(c)! - myIdx);
         if (dist < bestDist || (dist === bestDist && (best === -1 || c < best))) {
           best = c;

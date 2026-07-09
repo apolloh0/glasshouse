@@ -176,3 +176,20 @@ must stay PURE (no PRNG consumption, no live-state mutation; superseded by
 the recorded frame once advance() runs) — asserted by tests/peek.test.ts;
 link.ts's header now documents extended rule (b) (a definition signature
 selects the ops its body produced).
+
+**Gate L — recorded PASS (2026-07-09).** The phase2-spec §6 manual script
+performed and reported by review: frame slider replay, focus + scrub with
+editor highlight, onion at three alphas, trails, static-picture scrubbing,
+and the mid-scrub edit with stable timeline rows. Phase 2 closed. Phase 2
+findings 1–2 approved.
+
+**D33 — Pass-2 matching requires equal callees for call nodes.** In
+matchPrograms pass 2 (same-kind positional recovery), `call` nodes
+additionally require prev.callee === next.callee; all other kinds keep the
+kind-only rule. Rationale: kind-only slots let a total line rewrite
+(circle(...) -> rect(...)) re-badge an unrelated statement's call with a
+carried stable id — invariant-legal but against D17's honesty rule, and
+Phase 4 attaches heavier state to stable ids. Pinned by
+tests/match-tightening.test.ts (circle->rect rewrite is drop+mint for the
+call and its arguments; the statement SLOT — the ExprStmt — may still
+carry). Pass 1 is unaffected (fingerprints already include callees).

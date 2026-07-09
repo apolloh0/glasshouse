@@ -22,10 +22,17 @@
 //    inside it and do not appear (attributing those needs call-tree work
 //    that belongs to a later phase).
 //
-//  executedInFrames — the same idea across FRAMES: rows = statement nodes
-//  inside frame/event blocks (source order); cell per supplied frame = the
-//  first completion step in that frame's trace, or null. The studio feeds
-//  this a window of Session.traceAt(k) views around the focused frame.
+//  executedInFrames — the same idea across FRAMES: rows = LEAF statement
+//  nodes (state/assign/expr/return) inside frame/event blocks, source
+//  order; cell per supplied frame = the first completion step in that
+//  frame's trace, or null. The studio feeds this a window of
+//  Session.traceAt(k) views around the focused frame.
+//
+//  ROW POLICIES differ on purpose (reviewed, Phase 2): executedInFrames
+//  lists LEAF statements only — containers (if/repeat/for) complete every
+//  frame their header runs and their spans swallow their branches, hiding
+//  the essay's pattern. iterationGrid KEEPS containers — inside one loop,
+//  an if's per-iteration completion is itself part of the pattern.
 
 import type { NodeId, Program, Span, Stmt } from "../lang/ast.js";
 import { children, spanIndex, visit, type AnyNode } from "../lang/walk.js";

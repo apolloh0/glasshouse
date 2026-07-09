@@ -215,6 +215,8 @@ spans swallow their branches, so demo (b)'s rowFor("y = 220") would find
 the `if` row instead of the clamp assign. iterationGrid keeps containers
 (its test pins them). Taken ahead of P2-T6 because the fix is flow
 semantics, not studio glue.
+Reviewed: finding 1 approved; both row policies now documented in the
+lines.ts header.
 
 ## P2-T6 — studio Phase 2 wiring — 2026-07-09
 Done: frame slider (pause-on-drag, resume-at-end), scrubber -> scrubView
@@ -226,6 +228,7 @@ timeline DOM rows are the SAME elements after a literal edit (stable ids
 held, §6.6), scrub re-anchors, onion ghosts bracket the ball at three
 alphas. Initial-load bug caught live: keepScrubPosition must apply only
 to mid-edit refocus, or a fresh static load renders step 0 (blank).
+Reviewed: finding 2 approved.
 
 ## P2-T8 / Gates H–K — 2026-07-09
 Gate H ✓ all Phase 0-2 test files green (127 tests; the only reds are the
@@ -241,3 +244,7 @@ Phase 0/1 budgets re-run, no regression: parse+fast @50k 2.40 ms (100);
 instrumented @50k 4.00 ms (30); fast @5k 0.20 ms (5); editor loop
 0.10-0.22 ms examples, 4.82 ms synthetic-500.
 Gate L: pending human — manual script presented, awaiting result.
+Reviewed: Gate L PASS recorded in decisions.md; Phase 2 findings 1–2
+approved. Follow-through: lines.ts header documents both row policies;
+pass 2 tightened per D33 (equal callees for call nodes) with a new
+pinning test, tests/match-tightening.test.ts.
