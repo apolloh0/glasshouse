@@ -21,7 +21,6 @@
 //  chooses trail styling (the model stays data-only).
 
 import type { DisplayList, DisplayOp } from "../render/displayList.js";
-import { TODO } from "../util/todo.js";
 
 export const ALPHAS = [0.30, 0.18, 0.08] as const;
 
@@ -36,8 +35,16 @@ export function onionLayers(
   before = 3,
   after = 3,
 ): GhostLayer[] {
-  void current; void frameCount; void before; void after;
-  TODO("P2-T5", "pinned alphas + paint order per header");
+  const layers: GhostLayer[] = [];
+  // faintest first (descending distance); before precedes after at equal alpha
+  for (let d = ALPHAS.length; d >= 1; d--) {
+    const alpha = ALPHAS[d - 1]!;
+    const b = current - d;
+    if (d <= before && b >= 0 && b < frameCount) layers.push({ frame: b, alpha });
+    const a = current + d;
+    if (d <= after && a >= 0 && a < frameCount) layers.push({ frame: a, alpha });
+  }
+  return layers;
 }
 
 export interface TrailSlice {
@@ -51,6 +58,11 @@ export function trailOps(
   length: number,
   stride: number,
 ): TrailSlice[] {
-  void getDisplay; void current; void length; void stride;
-  TODO("P2-T5");
+  const slices: TrailSlice[] = [];
+  for (let i = length; i >= 1; i--) { // oldest first = paint order
+    const frame = current - i * stride;
+    if (frame < 0) continue;
+    slices.push({ frame, ops: getDisplay(frame).ops });
+  }
+  return slices;
 }
