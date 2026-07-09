@@ -31,9 +31,10 @@
 
 import type { NodeId, Program } from "../lang/ast.js";
 import type { Value } from "../engine/values.js";
+import { decodeValue } from "../engine/values.js";
 import type { EngineState } from "../engine/frame.js";
+import { STEP_KIND, VTAG } from "../engine/trace.js";
 import type { TraceView } from "../host/run.js";
-import { TODO } from "../util/todo.js";
 
 export interface WriteEvent {
   step: number;
@@ -44,8 +45,19 @@ export interface WriteEvent {
 
 /** Every write in the trace, in step order. */
 export function writeEvents(program: Program, view: TraceView): WriteEvent[] {
-  void program; void view;
-  TODO("P3-T2", "decode write rows per header");
+  void program; // the encoding is trace-side; the program isn't needed
+  const out: WriteEvent[] = [];
+  const trace = view.trace;
+  for (let s = 0; s < trace.count; s++) {
+    const row = trace.row(s);
+    if (row.kind !== STEP_KIND.write) continue;
+    // D25: strIdx = the var NAME; a string VALUE's intern index sits in `a`.
+    const value = row.valueTag === VTAG.str
+      ? ({ t: "str", v: trace.string(row.a) } as Value)
+      : decodeValue(row.valueTag, row.a, row.b, -1, () => "")!;
+    out.push({ step: s, nodeId: row.nodeId, name: trace.string(row.strIdx), value });
+  }
+  return out;
 }
 
 export function varsAtStep(
@@ -54,8 +66,12 @@ export function varsAtStep(
   entering: ReadonlyMap<string, Value>,
   step: number,
 ): Map<string, Value> {
-  void program; void view; void entering; void step;
-  TODO("P3-T2");
+  const vars = new Map(entering);
+  for (const w of writeEvents(program, view)) {
+    if (w.step > step) break; // post-state (D20): writes at step <= s apply
+    vars.set(w.name, w.value);
+  }
+  return vars;
 }
 
 export interface StateRow {
@@ -70,8 +86,17 @@ export function stateRows(
   view: TraceView,
   entering: ReadonlyMap<string, Value>,
 ): StateRow[] {
-  void program; void view; void entering;
-  TODO("P3-T2", "declaration order; leaving = entering + writes");
+  const writes = writeEvents(program, view);
+  const rows: StateRow[] = [];
+  for (const item of program.setup) {
+    if (item.kind !== "state") continue; // declaration order
+    const mine = writes.filter((w) => w.name === item.name);
+    const enteringValue = entering.get(item.name) ?? null;
+    const leaving = mine.length > 0 ? mine[mine.length - 1]!.value : enteringValue;
+    if (leaving === null) continue; // never born in this trace
+    rows.push({ name: item.name, entering: enteringValue, writes: mine, leaving });
+  }
+  return rows;
 }
 
 export function varSeries(
@@ -79,8 +104,10 @@ export function varSeries(
   name: string,
   frames: readonly number[],
 ): (number | null)[] {
-  void getState; void name; void frames;
-  TODO("P3-T2");
+  return frames.map((k) => {
+    const v = getState(k).vars.get(name);
+    return v !== undefined && v.t === "num" ? v.v : null;
+  });
 }
 
 export interface Spark {
@@ -94,6 +121,20 @@ export function sparkline(
   width: number,
   height: number,
 ): Spark | null {
-  void values; void width; void height;
-  TODO("P3-T2", "pinned geometry (D29)");
+  const numeric = values.filter((v): v is number => v !== null);
+  if (numeric.length === 0) return null;
+  const min = Math.min(...numeric);
+  const max = Math.max(...numeric);
+  const n = values.length;
+  const points: { x: number; y: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const v = values[i];
+    if (v === null || v === undefined) continue; // nulls gap (D29)
+    const x = n === 1 ? (width - 1) / 2 : (i * (width - 1)) / (n - 1);
+    const y = max === min
+      ? (height - 1) / 2 // flat series centers
+      : (height - 1) - ((v - min) / (max - min)) * (height - 1);
+    points.push({ x, y });
+  }
+  return { points, min, max };
 }

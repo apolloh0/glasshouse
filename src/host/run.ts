@@ -8,7 +8,6 @@ import type { StaticLayer } from "../engine/frame.js";
 import { evalFrame, NO_INPUT, runSetup } from "../engine/frame.js";
 import { History, snapshotState } from "../engine/history.js";
 import { parse } from "../lang/parser.js";
-import { TODO } from "../util/todo.js";
 
 export interface TraceView {
   trace: StepStore;
@@ -88,7 +87,7 @@ export class Session {
   /** Phase 3 (D24) — the recorded inputs of frame k. Inputs are state: the
    *  panel shows pointer position/buttons with the same machinery as vars.
    *  Passthrough to History.inputsAt. */
-  inputsAt(k: number): FrameInputs { void k; TODO("P3-T2", "Session.inputsAt"); }
+  inputsAt(k: number): FrameInputs { return this.history.inputsAt(k); }
 
   /** Two-tier upper tier: re-run frame k instrumented, from stateAt(k).
    *  Focusing frame 0 on a fresh session traces the same NO_INPUT frame the
