@@ -1,0 +1,13 @@
+// The canonical Phase 0 program: state, frames, if, arithmetic.
+paper(color: #FDF6E3)
+
+state y = 40
+state speed = 0
+
+every frame:
+  speed = speed + 0.5
+  y = y + speed
+  if y > 220:
+    y = 220
+    speed = 0 - speed * 0.85
+  circle(center: (160, y), radius: 20, fill: #2A76C6)

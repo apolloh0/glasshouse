@@ -1,0 +1,12 @@
+// Input events: the dot jumps to wherever the pointer was pressed.
+paper(color: #FFFFFF)
+
+state x = 160
+state y = 120
+
+every frame:
+  circle(center: (x, y), radius: 8, fill: #D33682)
+
+when pointer pressed:
+  x = pointer.x
+  y = pointer.y

@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Glasshouse studio — Phase 1</title>
+  <style>
+    body { margin: 0; display: grid; grid-template-columns: 1fr 340px;
+           height: 100vh; font: 13px/1.4 system-ui, sans-serif; }
+    #editor { border-right: 1px solid #ddd; overflow: auto; }
+    #right { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+    #stagewrap { position: relative; width: 320px; height: 240px; }
+    #stage, #overlay { position: absolute; inset: 0; }
+    #overlay { pointer-events: none; } /* annotations draw here */
+    .chalk-card { max-width: 260px; padding: 6px 8px; }
+    .chalk-card .ctx { color: #666; }
+    .chalk-linked { background: #fff3bf; }
+    #status { color: #666; min-height: 2em; }
+  </style>
+</head>
+<body>
+  <div id="editor"></div>
+  <div id="right">
+    <div id="stagewrap">
+      <canvas id="stage" width="320" height="240"></canvas>
+      <canvas id="overlay" width="320" height="240"></canvas>
+    </div>
+    <div id="status"></div>
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

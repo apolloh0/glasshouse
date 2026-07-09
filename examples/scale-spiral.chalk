@@ -1,0 +1,7 @@
+// Phase 3's fixture: the essay's "scaleFactor" questions, Chalk-sized.
+// What values does the radius take? How do they change? Faster or slower?
+// Gate N answers all three by inspection of this program's trace.
+paper(color: #FFFFFF)
+
+repeat 12 as i:
+  circle(center: (20 + i * 22, 120), radius: 2 + i * 1.5, fill: #7A4EA3)

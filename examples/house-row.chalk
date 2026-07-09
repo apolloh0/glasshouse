@@ -1,0 +1,14 @@
+// Static picture: definitions, repeat, member access, seeded random in setup.
+paper(color: #EAF4FB)
+
+to house(at: base, height: h):
+  rect(left: base.x, top: base.y - h, width: h * 1.2, height: h,
+       fill: #C46A3D)
+  triangle(a: (base.x, base.y - h),
+           b: (base.x + h * 1.2, base.y - h),
+           c: (base.x + h * 0.6, base.y - h - 30),
+           fill: #8A3324)
+end
+
+repeat 5 as i:
+  house(at: (20 + i * 55, 220), height: 40 + random(from: 0, to: 20))
