@@ -17,9 +17,16 @@ export const chalkLanguage = LRLanguage.define({
   parser: parser.configure({
     props: [
       styleTags({
-        // P1-T2: extend to Keyword, Label, Color, Angle, String, BuiltinName.
         Number: t.number,
+        Angle: t.number,
+        Color: t.color,
+        String: t.string,
+        Label: t.propertyName,
+        Keyword: t.keyword,
+        BuiltinName: t.function(t.variableName),
         Identifier: t.variableName,
+        Op: t.operator,
+        LineComment: t.lineComment,
       }),
     ],
   }),
