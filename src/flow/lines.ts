@@ -140,11 +140,15 @@ export function executedInFrames(
   program: Program,
   views: { frame: number; view: TraceView }[],
 ): FrameRow[] {
-  // Rows: statement nodes inside frame/event blocks, source order.
+  // Rows: LEAF statement nodes inside frame/event blocks, source order.
+  // Containers (if/repeat/for) complete every frame their header runs and
+  // their spans swallow their branches — the cross-frame pattern the essay
+  // wants is which LINES ran (Gate I demo b pins this; grids keep containers).
+  const LEAF_KINDS = new Set(["state", "assign", "expr", "return"]);
   const rowNodes: AnyNode[] = [];
   const rec = (n: AnyNode): void => {
     for (const kid of children(n)) {
-      if (STMT_KINDS.has(kid.kind)) rowNodes.push(kid);
+      if (LEAF_KINDS.has(kid.kind)) rowNodes.push(kid);
       rec(kid);
     }
   };
