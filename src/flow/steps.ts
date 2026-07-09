@@ -20,8 +20,9 @@
 // is deliberately not a Phase 2 feature.)
 
 import type { NodeId, Program, Span } from "../lang/ast.js";
+import { spanIndex, visit } from "../lang/walk.js";
+import { STEP_KIND } from "../engine/trace.js";
 import type { TraceView } from "../host/run.js";
-import { TODO } from "../util/todo.js";
 
 export interface ScrubView {
   upToOp: number;
@@ -40,8 +41,18 @@ export function scrubView(
   view: TraceView,
   step: number,
 ): ScrubView {
-  void program; void staticOpsCount; void view; void step;
-  TODO("P2-T3", "post-state scrub semantics per header");
+  const ops = view.display.ops;
+  // Frame ops sit after the static prefix and are emitted in ascending
+  // stepIndex order — count the prefix with stepIndex <= step (D20).
+  let upToOp = staticOpsCount;
+  for (let i = staticOpsCount; i < ops.length; i++) {
+    if (ops[i]!.stepIndex > step) break;
+    upToOp++;
+  }
+  const row = view.trace.row(step);
+  const span = spanIndex(program).get(row.nodeId);
+  if (!span) throw new Error("scrubView: trace row " + step + " references unknown node " + row.nodeId);
+  return { upToOp, nodeId: row.nodeId, span };
 }
 
 export function stepsForSpan(
@@ -49,6 +60,26 @@ export function stepsForSpan(
   view: TraceView,
   span: { start: number; end: number },
 ): number[] {
-  void program; void view; void span;
-  TODO("P2-T3");
+  // Statement completions whose span lies inside the selection (the scrubber
+  // snaps line-wise; expression-level stepping is deliberately not Phase 2).
+  const stmtIds = new Set<NodeId>();
+  visit(program, (node) => {
+    switch (node.kind) {
+      case "state": case "assign": case "expr":
+      case "repeat": case "for": case "if": case "return":
+        if (node.span.start >= span.start && node.span.end <= span.end) {
+          stmtIds.add(node.id);
+        }
+        break;
+      default:
+        break;
+    }
+  });
+  const steps: number[] = [];
+  const trace = view.trace;
+  for (let s = 0; s < trace.count; s++) {
+    const row = trace.row(s);
+    if (row.kind === STEP_KIND.stmt && stmtIds.has(row.nodeId)) steps.push(s);
+  }
+  return steps;
 }

@@ -105,5 +105,11 @@ export class Session {
   /** Phase 2 (D21) — re-run SETUP instrumented: the scrubbable trace for
    *  static pictures. display carries the setup ops (bg applied); callers
    *  pass staticOpsCount = 0 to flow/steps.ts for this view. */
-  traceSetup(): TraceView { TODO("P2-T3", "Session.traceSetup"); }
+  traceSetup(): TraceView {
+    const setup = runSetup(this.program, this.seed, "instrumented");
+    return {
+      trace: setup.trace!,
+      display: { bg: setup.staticLayer.bg, ops: setup.staticLayer.ops },
+    };
+  }
 }
