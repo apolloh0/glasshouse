@@ -15,9 +15,18 @@
 //    machinery ("unexpected token", "EOF", "identifier").
 
 import type { Diagnostic } from "../lang/diagnostics.js";
-import { TODO } from "../util/todo.js";
+import { ChalkError } from "../lang/diagnostics.js";
+import { parse } from "../lang/parser.js";
+import { evalFrame, NO_INPUT, runSetup } from "../engine/frame.js";
 
 export function diagnosticsFor(source: string): Diagnostic[] {
-  void source;
-  TODO("P1-T6", "parse, then one guarded fast frame; header rules");
+  try {
+    const program = parse(source);
+    const { state, staticLayer } = runSetup(program, 0);
+    evalFrame(program, staticLayer, state, NO_INPUT, "fast");
+    return [];
+  } catch (e) {
+    if (e instanceof ChalkError) return [e.diagnostic];
+    throw e;
+  }
 }

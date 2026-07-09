@@ -4,7 +4,7 @@ import type {
 } from "./ast.js";
 import type { Token } from "./tokens.js";
 import { lex } from "./lexer.js";
-import { err } from "./diagnostics.js";
+import { err, type ChalkError } from "./diagnostics.js";
 import { assignNodeIds } from "./nodeIds.js";
 
 /**
@@ -56,17 +56,25 @@ class Parser {
   }
   private expectOp(text: string, what: string): Token {
     const t = this.eat("op", text);
-    if (!t) throw err("I expected `" + text + "` " + what + ".", this.peek().span);
+    if (!t) throw this.errAt("I expected `" + text + "` " + what + ".", this.peek().span);
     return t;
   }
   private expectNewline(): void {
     if (this.at("eof") || this.eat("newline")) return;
     const t = this.peek();
-    throw err("I got stuck at `" + (t.text || t.kind) + "` — this line seems to continue past its end.", t.span);
+    throw this.errAt("I got stuck at `" + (t.text || t.kind) + "` — this line seems to continue past its end.", t.span);
   }
 
   private span(a: Span, b: Span): Span {
     return { start: a.start, end: b.end, line: a.line, col: a.col };
+  }
+
+  /** Diagnostics must point at something visible: synthetic end-of-source
+   *  tokens carry empty spans — widen those to the previous character. */
+  private errAt(message: string, span: Span): ChalkError {
+    if (span.end > span.start) return err(message, span);
+    const start = Math.max(0, span.start - 1);
+    return err(message, { ...span, start, end: start + 1 });
   }
 
   // ---------- program ----------
@@ -81,13 +89,13 @@ class Parser {
     while (!this.at("eof")) {
       if (this.eat("newline")) continue;
       if (this.at("indent")) {
-        throw err("This line is indented, but nothing above it asks for an indented block.",
+        throw this.errAt("This line is indented, but nothing above it asks for an indented block.",
           this.peek().span);
       }
       if (this.atKw("to")) {
         const def = this.parseDefinition();
         if (defs.has(def.name)) {
-          throw err("There are two `to " + def.name + "` blocks — each name can only be taught once.",
+          throw this.errAt("There are two `to " + def.name + "` blocks — each name can only be taught once.",
             def.span);
         }
         defs.set(def.name, def);
@@ -121,7 +129,7 @@ class Parser {
     const toTok = this.next(); // `to`
     const nameTok = this.eat("name");
     if (!nameTok) {
-      throw err("`to` needs a name for what you're teaching — like `to house(at: base):`.",
+      throw this.errAt("`to` needs a name for what you're teaching — like `to house(at: base):`.",
         this.peek().span);
     }
     this.expectOp("(", "after `to " + nameTok.text + "`");
@@ -130,13 +138,13 @@ class Parser {
       for (;;) {
         const labelTok = this.at("name") || this.at("keyword") ? this.next() : null;
         if (!labelTok || !this.atOp(":")) {
-          throw err("Each input to `" + nameTok.text + "` looks like `label: name` — for example `to house(at: base):`.",
+          throw this.errAt("Each input to `" + nameTok.text + "` looks like `label: name` — for example `to house(at: base):`.",
             (labelTok ?? this.peek()).span);
         }
         this.next(); // `:`
         const bindTok = this.eat("name");
         if (!bindTok) {
-          throw err("`" + labelTok.text + ":` needs a name to call this input inside the block — like `" + labelTok.text + ": p`.",
+          throw this.errAt("`" + labelTok.text + ":` needs a name to call this input inside the block — like `" + labelTok.text + ": p`.",
             this.peek().span);
         }
         params.push({ name: labelTok.text, span: bindTok.span });
@@ -149,7 +157,7 @@ class Parser {
     const body = this.parseIndentedBlock("`to " + nameTok.text + ":`", "def");
     const endTok = this.eat("keyword", "end");
     if (!endTok) {
-      throw err("This `to " + nameTok.text + "` block needs `end` on its own line after its last line.",
+      throw this.errAt("This `to " + nameTok.text + "` block needs `end` on its own line after its last line.",
         this.peek().span);
     }
     this.expectNewline();
@@ -162,7 +170,7 @@ class Parser {
   private parseFrameBlock(): FrameBlock {
     const everyTok = this.next(); // `every`
     if (!this.eat("keyword", "frame")) {
-      throw err("`every` starts the once-per-frame block — write `every frame:`.", this.peek().span);
+      throw this.errAt("`every` starts the once-per-frame block — write `every frame:`.", this.peek().span);
     }
     this.expectOp(":", "after `every frame`");
     const body = this.parseIndentedBlock("`every frame:`", "frame");
@@ -178,18 +186,18 @@ class Parser {
     if (this.eat("keyword", "pointer")) {
       const which = this.eat("keyword", "pressed") ?? this.eat("keyword", "released") ?? this.eat("keyword", "moved");
       if (!which) {
-        throw err("`when pointer` needs `pressed`, `released`, or `moved` — like `when pointer pressed:`.",
+        throw this.errAt("`when pointer` needs `pressed`, `released`, or `moved` — like `when pointer pressed:`.",
           this.peek().span);
       }
       event = { kind: "pointer", which: which.text as "pressed" | "released" | "moved" };
     } else if (this.eat("keyword", "key")) {
       const keyTok = this.eat("string");
       if (!keyTok) {
-        throw err('`when key` needs the key in quotes — like `when key "a":`.', this.peek().span);
+        throw this.errAt('`when key` needs the key in quotes — like `when key "a":`.', this.peek().span);
       }
       event = { kind: "key", key: keyTok.strValue };
     } else {
-      throw err("`when` starts an event block — write `when pointer pressed:` or `when key \"a\":`.",
+      throw this.errAt("`when` starts an event block — write `when pointer pressed:` or `when key \"a\":`.",
         this.peek().span);
     }
     this.expectOp(":", "after the `when ...` event");
@@ -206,7 +214,7 @@ class Parser {
   private parseIndentedBlock(owner: string, ctx: Ctx): Stmt[] {
     this.expectNewline();
     if (!this.eat("indent")) {
-      throw err(owner + " needs at least one line inside it — indent the next line with two spaces.",
+      throw this.errAt(owner + " needs at least one line inside it — indent the next line with two spaces.",
         this.peek().span);
     }
     const body: Stmt[] = [];
@@ -216,7 +224,7 @@ class Parser {
     }
     this.eat("dedent");
     if (body.length === 0) {
-      throw err(owner + " needs at least one line inside it.", this.peek().span);
+      throw this.errAt(owner + " needs at least one line inside it.", this.peek().span);
     }
     return body;
   }
@@ -238,30 +246,30 @@ class Parser {
         case "if": return this.parseIf(ctx);
         case "return": return this.parseReturn(ctx);
         case "else":
-          throw err("`else` needs an `if` right above it, at the same indentation.", t.span);
+          throw this.errAt("`else` needs an `if` right above it, at the same indentation.", t.span);
         case "to":
-          throw err("`to` blocks live at the top of the program, not inside another block.", t.span);
+          throw this.errAt("`to` blocks live at the top of the program, not inside another block.", t.span);
         case "every": case "when":
-          throw err("`" + t.text + "` blocks live at the top of the program, not inside another block.", t.span);
+          throw this.errAt("`" + t.text + "` blocks live at the top of the program, not inside another block.", t.span);
         default:
-          throw err("I got stuck on this line — it starts with `" + t.text + "`, which I didn't expect here.", t.span);
+          throw this.errAt("I got stuck on this line — it starts with `" + t.text + "`, which I didn't expect here.", t.span);
       }
     }
     if (t.kind === "name") return this.parseNameStmt(ctx);
-    throw err("I got stuck on this line — I didn't expect `" + (t.text || t.kind) + "` here.", t.span);
+    throw this.errAt("I got stuck on this line — I didn't expect `" + (t.text || t.kind) + "` here.", t.span);
   }
 
   private parseStateDecl(ctx: Ctx): Stmt {
     const stateTok = this.next();
     const nameTok = this.eat("name");
     if (!nameTok) {
-      throw err("`state` needs a name for the value it creates — like `state y = 40`.", this.peek().span);
+      throw this.errAt("`state` needs a name for the value it creates — like `state y = 40`.", this.peek().span);
     }
     this.expectOp("=", "after `state " + nameTok.text + "`");
     const init = this.parseExpr();
     const span = this.span(stateTok.span, init.span);
     if (ctx !== "top") {
-      throw err("`state " + nameTok.text + "` lives at the top of the program, not inside a block — move it up top.",
+      throw this.errAt("`state " + nameTok.text + "` lives at the top of the program, not inside a block — move it up top.",
         span);
     }
     this.expectNewline();
@@ -274,7 +282,7 @@ class Parser {
     let counter: string | null = null;
     if (this.eat("keyword", "as")) {
       const c = this.eat("name");
-      if (!c) throw err("`as` names the counter — like `repeat 5 as i:`.", this.peek().span);
+      if (!c) throw this.errAt("`as` names the counter — like `repeat 5 as i:`.", this.peek().span);
       counter = c.text;
     }
     this.expectOp(":", "after `repeat ...`");
@@ -288,13 +296,13 @@ class Parser {
   private parseFor(ctx: Ctx): Stmt {
     const forTok = this.next();
     const nameTok = this.eat("name");
-    if (!nameTok) throw err("`for` names its counter first — like `for x from 1 to 5:`.", this.peek().span);
+    if (!nameTok) throw this.errAt("`for` names its counter first — like `for x from 1 to 5:`.", this.peek().span);
     if (!this.eat("keyword", "from")) {
-      throw err("`for " + nameTok.text + "` needs `from` — like `for " + nameTok.text + " from 1 to 5:`.", this.peek().span);
+      throw this.errAt("`for " + nameTok.text + "` needs `from` — like `for " + nameTok.text + " from 1 to 5:`.", this.peek().span);
     }
     const from = this.parseExpr();
     if (!this.eat("keyword", "to")) {
-      throw err("`for " + nameTok.text + "` needs `to` after its starting value — like `for " + nameTok.text + " from 1 to 5:`.", this.peek().span);
+      throw this.errAt("`for " + nameTok.text + "` needs `to` after its starting value — like `for " + nameTok.text + " from 1 to 5:`.", this.peek().span);
     }
     const to = this.parseExpr();
     let step: Expr | null = null;
@@ -332,7 +340,7 @@ class Parser {
   private parseReturn(ctx: Ctx): Stmt {
     const retTok = this.next();
     if (ctx !== "def") {
-      throw err("`return` only makes sense inside a `to` block.", retTok.span);
+      throw this.errAt("`return` only makes sense inside a `to` block.", retTok.span);
     }
     let value: Expr | null = null;
     if (!this.at("newline") && !this.at("eof")) value = this.parseExpr();
@@ -361,21 +369,21 @@ class Parser {
     while (this.atOp(".")) {
       this.next();
       const m = this.eat("name") ?? this.eat("keyword");
-      if (!m) throw err("`.` picks a part of a value — like `" + nameTok.text + ".x`.", this.peek().span);
+      if (!m) throw this.errAt("`.` picks a part of a value — like `" + nameTok.text + ".x`.", this.peek().span);
       target = {
         kind: "member", id: -1, object: target, member: m.text,
         span: this.span(nameTok.span, m.span),
       };
     }
     if (!this.atOp("=")) {
-      throw err("This line doesn't do anything on its own — call something like `circle(...)`, or change a value with `=`.",
+      throw this.errAt("This line doesn't do anything on its own — call something like `circle(...)`, or change a value with `=`.",
         nameTok.span);
     }
     this.next(); // `=`
     const value = this.parseExpr();
     const span = this.span(nameTok.span, value.span);
     if (ctx !== "frame") {
-      throw err("`" + nameTok.text + "` can only change inside an `every frame:` or `when ...:` block.",
+      throw this.errAt("`" + nameTok.text + "` can only change inside an `every frame:` or `when ...:` block.",
         span);
     }
     this.expectNewline();
@@ -460,7 +468,7 @@ class Parser {
     while (this.atOp(".")) {
       this.next();
       const m = this.eat("name") ?? this.eat("keyword");
-      if (!m) throw err("`.` picks a part of a value — like `pointer.x`.", this.peek().span);
+      if (!m) throw this.errAt("`.` picks a part of a value — like `pointer.x`.", this.peek().span);
       e = { kind: "member", id: -1, object: e, member: m.text, span: this.span(e.span, m.span) };
     }
     return e;
@@ -487,14 +495,14 @@ class Parser {
           this.next();
           return { kind: "name", id: -1, name: "pointer", span: t.span };
         }
-        throw err("I didn't expect `" + t.text + "` in the middle of a value.", t.span);
+        throw this.errAt("I didn't expect `" + t.text + "` in the middle of a value.", t.span);
       case "op":
         if (t.text === "(") return this.parseParenOrPoint();
         break;
       default:
         break;
     }
-    throw err("I expected a value here — a number, a color, a name, or a point like (160, 120).", t.span);
+    throw this.errAt("I expected a value here — a number, a color, a name, or a point like (160, 120).", t.span);
   }
 
   /** `(` expr `)` grouping, or `(` expr `,` expr `)` point literal. */
@@ -504,13 +512,13 @@ class Parser {
     if (this.eat("op", ",")) {
       const second = this.parseExpr();
       const rparen = this.eat("op", ")");
-      if (!rparen) throw err("This `(` is missing its closing `)`.", lparen.span);
+      if (!rparen) throw this.errAt("This `(` is missing its closing `)`.", lparen.span);
       return {
         kind: "point", id: -1, x: first, y: second,
         span: this.span(lparen.span, rparen.span),
       };
     }
-    if (!this.eat("op", ")")) throw err("This `(` is missing its closing `)`.", lparen.span);
+    if (!this.eat("op", ")")) throw this.errAt("This `(` is missing its closing `)`.", lparen.span);
     return first;
   }
 
@@ -520,13 +528,13 @@ class Parser {
     if (!this.atOp(")")) {
       for (;;) {
         if (this.at("eof")) {
-          throw err("This `(` is missing its closing `)`.", lparen.span);
+          throw this.errAt("This `(` is missing its closing `)`.", lparen.span);
         }
         const labelTok = (this.at("name") || this.at("keyword")) && this.peek(1).kind === "op" && this.peek(1).text === ":"
           ? this.next()
           : null;
         if (!labelTok) {
-          throw err("`" + nameTok.text + "` needs labels on its values — try `" + nameTok.text + "(label: value, ...)`.",
+          throw this.errAt("`" + nameTok.text + "` needs labels on its values — try `" + nameTok.text + "(label: value, ...)`.",
             this.peek().span);
         }
         this.next(); // `:`
@@ -538,7 +546,7 @@ class Parser {
     }
     const rparen = this.eat("op", ")");
     if (!rparen) {
-      throw err("This `(` is missing its closing `)`.", lparen.span);
+      throw this.errAt("This `(` is missing its closing `)`.", lparen.span);
     }
     return {
       kind: "call", id: -1, callee: nameTok.text, args,
