@@ -90,10 +90,15 @@ export class Session {
    *  Passthrough to History.inputsAt. */
   inputsAt(k: number): FrameInputs { void k; TODO("P3-T2", "Session.inputsAt"); }
 
-  /** Two-tier upper tier: re-run frame k instrumented, from stateAt(k). */
+  /** Two-tier upper tier: re-run frame k instrumented, from stateAt(k).
+   *  Focusing frame 0 on a fresh session traces the same NO_INPUT frame the
+   *  displayAt(0) peek shows (pure: replays a snapshot, records nothing). */
   traceAt(k: number): TraceView {
     const state = this.stateAt(k);
-    const result = evalFrame(this.program, this.staticLayer, state, this.history.inputsAt(k), "instrumented");
+    const inputs = k === 0 && this.history.frameCount() === 0
+      ? NO_INPUT
+      : this.history.inputsAt(k);
+    const result = evalFrame(this.program, this.staticLayer, state, inputs, "instrumented");
     return { trace: result.trace!, display: result.display };
   }
 

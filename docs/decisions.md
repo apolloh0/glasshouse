@@ -167,3 +167,12 @@ dev machine: parse+fast @50k steps 2.14 ms (budget 100); instrumented @50k
 3.68 ms (budget 30); fast @5k 0.19 ms (budget 5). Stress honesty check:
 50,007 steps/frame. No micro-optimization was needed; the escalation path
 (compile-to-closures, spec §7) remains unbuilt.
+
+**Gate G — recorded PASS (2026-07-09).** Two non-programmers each stated,
+unprompted, what three numbers in house-row.chalk control, using only hover
+and annotations (phase1-spec §4/§6 script). Phase 1 closed. Follow-up
+rulings: Phase 1 deviations 1–3 approved; the fresh-session frame-0 peek
+must stay PURE (no PRNG consumption, no live-state mutation; superseded by
+the recorded frame once advance() runs) — asserted by tests/peek.test.ts;
+link.ts's header now documents extended rule (b) (a definition signature
+selects the ops its body produced).

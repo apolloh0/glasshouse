@@ -7,7 +7,11 @@
 //     (a) the span of the op's sourceNodeId (the draw call) intersects S, or
 //     (b) S intersects a call site whose callee resolves — transitively
 //         through user definitions — to the Definition that lexically
-//         contains the op's sourceNodeId.
+//         contains the op's sourceNodeId. A definition's HEADER (the
+//         signature `to house(at: base, ...):`, up to its first body
+//         statement) reads as a call site to itself: selecting a signature
+//         selects the ops its body produced, while selections INSIDE the
+//         body stay per-call (reviewed extension, Phase 1).
 //     (b) is a STATIC approximation, on purpose: selecting one house(...)
 //     call site selects every house's ops across all iterations. Attributing
 //     ops to one specific call/iteration needs the trace and is Phase 2.

@@ -174,3 +174,6 @@ perf-flow/perf-state bench files stay skipped-red until their phases.
 Session extension for the bench: displayAt(0)/stateAt(0) work on a fresh
 session (entering frame 0 = post-setup state, NO_INPUT, not recorded).
 Gate G: pending human — hallway script presented, awaiting result.
+Reviewed: Gate G PASS recorded in decisions.md; Phase 1 deviations 1–3
+approved. Deviation 1 hardened: peek purity asserted by tests/peek.test.ts
+(added under the adding-tests-is-allowed ruling).
