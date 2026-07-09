@@ -3,6 +3,11 @@ import type { FrameInputs } from "../engine/frame.js";
 import type { EngineState } from "../engine/frame.js";
 import type { DisplayList } from "../render/displayList.js";
 import type { StepStore } from "../engine/trace.js";
+import type { Program } from "../lang/ast.js";
+import type { StaticLayer } from "../engine/frame.js";
+import { evalFrame, NO_INPUT, runSetup } from "../engine/frame.js";
+import { History, snapshotState } from "../engine/history.js";
+import { parse } from "../lang/parser.js";
 import { TODO } from "../util/todo.js";
 
 export interface TraceView {
@@ -11,27 +16,59 @@ export interface TraceView {
 }
 
 export class Session {
+  readonly program: Program;
+  private readonly seed: number;
+  private readonly staticLayer: StaticLayer;
+  private readonly history = new History();
+  private live: EngineState;
+
   /** Parse + runSetup. Throws ChalkError with span on bad source. */
   constructor(source: string, seed: number) {
-    void source; void seed;
-    TODO("T8", "Session constructor");
+    this.program = parse(source);
+    this.seed = seed;
+    const setup = runSetup(this.program, seed);
+    this.live = setup.state;
+    this.staticLayer = setup.staticLayer;
   }
 
   /** Run the next frame in fast mode, record into History. */
-  advance(inputs: FrameInputs): DisplayList { void inputs; TODO("T8", "Session.advance"); }
+  advance(inputs: FrameInputs): DisplayList {
+    const frameIndex = this.live.frameIndex;
+    const entering = snapshotState(this.live);
+    const result = evalFrame(this.program, this.staticLayer, this.live, inputs, "fast");
+    this.history.record(frameIndex, entering, inputs, result.display);
+    return result.display;
+  }
 
   /** Convenience: run n frames; script maps frameIndex -> inputs. */
   advanceFrames(n: number, script?: Map<number, FrameInputs>): void {
-    void n; void script; TODO("T8", "Session.advanceFrames");
+    for (let i = 0; i < n; i++) {
+      this.advance(script?.get(this.live.frameIndex) ?? NO_INPUT);
+    }
   }
 
-  frameCount(): number { TODO("T8", "Session.frameCount"); }
+  frameCount(): number { return this.history.frameCount(); }
 
   /** Exact display list for any recorded frame (ring hit or keyframe replay). */
-  displayAt(k: number): DisplayList { void k; TODO("T8", "Session.displayAt"); }
+  displayAt(k: number): DisplayList {
+    const hit = this.history.displayAt(k);
+    if (hit !== null) return hit;
+    const state = this.stateAt(k);
+    return evalFrame(this.program, this.staticLayer, state, this.history.inputsAt(k), "fast").display;
+  }
 
   /** State as it was ENTERING frame k (deep copy; derived by replay). */
-  stateAt(k: number): EngineState { void k; TODO("T8", "Session.stateAt"); }
+  stateAt(k: number): EngineState {
+    if (k < 0 || k >= this.history.frameCount()) {
+      throw new Error("Session.stateAt: frame " + k + " was never run");
+    }
+    const kf = this.history.nearestKeyframeAtOrBefore(k);
+    const state = kf.state;
+    for (let j = kf.frameIndex; j < k; j++) {
+      evalFrame(this.program, this.staticLayer, state, this.history.inputsAt(j), "fast");
+    }
+    return state;
+  }
 
   /** Phase 3 (D24) — the recorded inputs of frame k. Inputs are state: the
    *  panel shows pointer position/buttons with the same machinery as vars.
@@ -39,7 +76,11 @@ export class Session {
   inputsAt(k: number): FrameInputs { void k; TODO("P3-T2", "Session.inputsAt"); }
 
   /** Two-tier upper tier: re-run frame k instrumented, from stateAt(k). */
-  traceAt(k: number): TraceView { void k; TODO("T8", "Session.traceAt"); }
+  traceAt(k: number): TraceView {
+    const state = this.stateAt(k);
+    const result = evalFrame(this.program, this.staticLayer, state, this.history.inputsAt(k), "instrumented");
+    return { trace: result.trace!, display: result.display };
+  }
 
   /** Phase 2 (D21) — re-run SETUP instrumented: the scrubbable trace for
    *  static pictures. display carries the setup ops (bg applied); callers

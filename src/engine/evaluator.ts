@@ -252,8 +252,8 @@ function evalMember(ctx: EvalContext, e: Member): Value {
     e.span);
 }
 
+/** Compute a binop's value; the caller (evalExpr) records its completion. */
 function evalBinOp(ctx: EvalContext, e: BinOp): Value {
-  const op0 = ctx.ops.length;
   // and/or short-circuit: the right side only runs (and only counts steps)
   // when it can still change the answer.
   if (e.op === "and" || e.op === "or") {
@@ -262,23 +262,21 @@ function evalBinOp(ctx: EvalContext, e: BinOp): Value {
       throw err("`" + e.op + "` needs true/false on both sides — the left side is " + typeName(left) + ".",
         e.left.span);
     }
-    let result: boolean;
-    if (e.op === "and") {
-      result = left.v ? expectBoolSide(ctx, e, "right") : false;
-    } else {
-      result = left.v ? true : expectBoolSide(ctx, e, "right");
+    if (e.op === "and" && !left.v) return { t: "bool", v: false };
+    if (e.op === "or" && left.v) return { t: "bool", v: true };
+    const right = evalExpr(ctx, e.right);
+    if (right.t !== "bool") {
+      throw err("`" + e.op + "` needs true/false on both sides — the right side is " + typeName(right) + ".",
+        e.right.span);
     }
-    const v: Value = { t: "bool", v: result };
-    finishStep(ctx, e.id, STEP_KIND.expr, v, op0);
-    return v;
+    return { t: "bool", v: right.v };
   }
 
   const left = evalExpr(ctx, e.left);
   const right = evalExpr(ctx, e.right);
-  let v: Value;
   switch (e.op) {
-    case "==": v = { t: "bool", v: valueEquals(left, right) }; break;
-    case "!=": v = { t: "bool", v: !valueEquals(left, right) }; break;
+    case "==": return { t: "bool", v: valueEquals(left, right) };
+    case "!=": return { t: "bool", v: !valueEquals(left, right) };
     case "+": case "-": case "*": case "/": {
       if (left.t !== "num") {
         throw err("`" + e.op + "` needs numbers on both sides — the left side is " + typeName(left) + ".", e.left.span);
@@ -294,8 +292,7 @@ function evalBinOp(ctx: EvalContext, e: BinOp): Value {
         if (right.v === 0) throw err("Can't divide by zero here.", e.right.span);
         n = left.v / right.v;
       }
-      v = { t: "num", v: n };
-      break;
+      return { t: "num", v: n };
     }
     default: { // < > <= >=
       if (left.t !== "num") {
@@ -308,20 +305,9 @@ function evalBinOp(ctx: EvalContext, e: BinOp): Value {
         : e.op === ">" ? left.v > right.v
         : e.op === "<=" ? left.v <= right.v
         : left.v >= right.v;
-      v = { t: "bool", v: r };
+      return { t: "bool", v: r };
     }
   }
-  finishStep(ctx, e.id, STEP_KIND.expr, v, op0);
-  return v;
-}
-
-function expectBoolSide(ctx: EvalContext, e: BinOp, _side: "right"): boolean {
-  const right = evalExpr(ctx, e.right);
-  if (right.t !== "bool") {
-    throw err("`" + e.op + "` needs true/false on both sides — the right side is " + typeName(right) + ".",
-      e.right.span);
-  }
-  return right.v;
 }
 
 // ---------- T4: calls ----------
