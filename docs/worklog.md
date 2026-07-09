@@ -177,3 +177,67 @@ Gate G: pending human — hallway script presented, awaiting result.
 Reviewed: Gate G PASS recorded in decisions.md; Phase 1 deviations 1–3
 approved. Deviation 1 hardened: peek purity asserted by tests/peek.test.ts
 (added under the adding-tests-is-allowed ruling).
+
+## P2-T2 — edit matching — 2026-07-09
+Done: GumTree-lite matchPrograms (fingerprint anchors big-to-small with
+span tiebreaks + bulk subtree pairing; same-kind positional recovery under
+matched parents; pre-order fresh minting). Tests: 100→110 green (scenarios
++ invariants, first run).
+Surprises/deviations: descending-size processing makes "root unmatched"
+imply "subtree unmatched" (proof sketch in the commit); anchor pairing
+re-verifies kinds so a fingerprint collision degrades to no-anchor rather
+than a lying match (D17).
+Open questions for Phase 4+: pass 2 will happily re-purpose a same-kind
+slot across a total rewrite (circle line -> rect line keeps the stable id).
+The invariants allow it and the timeline reads fine; revisit if Phase 4
+attaches heavier state to ids.
+
+## P2-T3 — scrubber model — 2026-07-09
+Done: Session.traceSetup (runSetup's instrumented mode was already wired
+at T7 — confirmed, not rebuilt, per review note); scrubView post-state op
+cutoff; stepsForSpan statement completions. Tests: 110→115 green.
+Surprises/deviations: none.
+
+## P2-T4 — timeline rows — 2026-07-09
+Done: executedStatements (first-completion order), iterationGrid
+(last-direct-body-statement windows, D18 cap), executedInFrames.
+Tests: 115→120 green.
+
+## P2-T5 — ghosts — 2026-07-09
+Done: onionLayers (pinned alphas, paint order) + trailOps (oldest-first).
+Tests: 120→126 green (one flow-demo rode along).
+
+## P2-T7 — flow demonstrations (Gate I) — 2026-07-09 (taken before P2-T6)
+Done: Gate I 3/3 after one semantic fix. Tests: 126→127 green.
+Surprises/deviations: executedInFrames rows must be LEAF statements
+(state/assign/expr/return) — containers complete every frame and their
+spans swallow their branches, so demo (b)'s rowFor("y = 220") would find
+the `if` row instead of the clamp assign. iterationGrid keeps containers
+(its test pins them). Taken ahead of P2-T6 because the fix is flow
+semantics, not studio glue.
+
+## P2-T6 — studio Phase 2 wiring — 2026-07-09
+Done: frame slider (pause-on-drag, resume-at-end), scrubber -> scrubView
+render + editor highlight, timeline keyed by stable ids, loop-under-cursor
+grid swap, onion/trails compositing. Tests: unchanged at 127.
+Surprises/deviations: staticOpsCount is derived from the trace's max
+opEnd, one formula for traceAt and traceSetup views. Verified live:
+timeline DOM rows are the SAME elements after a literal edit (stable ids
+held, §6.6), scrub re-anchors, onion ghosts bracket the ball at three
+alphas. Initial-load bug caught live: keepScrubPosition must apply only
+to mid-edit refocus, or a fresh static load renders step 0 (blank).
+
+## P2-T8 / Gates H–K — 2026-07-09
+Gate H ✓ all Phase 0-2 test files green (127 tests; the only reds are the
+seven Phase 3 stub files). Goldens byte-identical (no diff since T8).
+Gate I ✓ flow-demos 3/3. Gate J ✓ match scenarios + invariants 10/10.
+Gate K ✓ PERF=1 numbers (medians, 15 reps after 5 warmups):
+  match 500-line edit:  5.63 ms  (budget 10 ms — 1.8x headroom, tightest
+                                  margin in the repo; escalation = memoize
+                                  indexes in IdTracker.advance if it slips)
+  scrubView @50k:       0.015 ms (budget 2 ms — ~130x headroom)
+  iterationGrid @50k:   0.77 ms  (budget 15 ms — ~19x headroom)
+Phase 0/1 budgets re-run, no regression: parse+fast @50k 2.40 ms (100);
+instrumented @50k 4.00 ms (30); fast @5k 0.20 ms (5); editor loop
+0.10-0.22 ms examples, 4.82 ms synthetic-500.
+Gate L: pending human — manual script presented, awaiting result.
