@@ -21,6 +21,9 @@ export class Session {
   private readonly staticLayer: StaticLayer;
   private readonly history = new History();
   private live: EngineState;
+  /** State as it left setup = state entering frame 0 (kept for peeking at
+   *  frame 0 before anything has been advanced). */
+  private readonly initialState: EngineState;
 
   /** Parse + runSetup. Throws ChalkError with span on bad source. */
   constructor(source: string, seed: number) {
@@ -29,6 +32,7 @@ export class Session {
     const setup = runSetup(this.program, seed);
     this.live = setup.state;
     this.staticLayer = setup.staticLayer;
+    this.initialState = snapshotState(setup.state);
   }
 
   /** Run the next frame in fast mode, record into History. */
@@ -56,6 +60,11 @@ export class Session {
     if (this.program.frames.length === 0 && this.program.events.length === 0) {
       return { bg: this.staticLayer.bg, ops: this.staticLayer.ops };
     }
+    if (k === 0 && this.history.frameCount() === 0) {
+      // Peek at frame 0 before any advance (fresh session, editor loop):
+      // derive it from the setup state with no input, without recording.
+      return evalFrame(this.program, this.staticLayer, this.stateAt(0), NO_INPUT, "fast").display;
+    }
     const hit = this.history.displayAt(k);
     if (hit !== null) return hit;
     const state = this.stateAt(k);
@@ -64,6 +73,7 @@ export class Session {
 
   /** State as it was ENTERING frame k (deep copy; derived by replay). */
   stateAt(k: number): EngineState {
+    if (k === 0) return snapshotState(this.initialState);
     if (k < 0 || k >= this.history.frameCount()) {
       throw new Error("Session.stateAt: frame " + k + " was never run");
     }
