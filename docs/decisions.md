@@ -134,3 +134,14 @@ motion is change.
 **D29 — Sparkline geometry pinned.** Point i of n: x = i*(w-1)/(n-1)
 (single point centers), y = (h-1) - (v-min)/(max-min)*(h-1), flat series at
 (h-1)/2, nulls gap. Shared by the state panel and row plots.
+
+**D30 — A definition parameter's span points at its binding name.**
+`Definition.params` (CONTRACT, ast.ts) stores `{name, span}` where `name` is
+the call label (pinned by tests/parser.test.ts and fingerprint.ts). Chalk
+params are Swift-style `label: bindingName` (`to house(at: base, ...)`), and
+the binding name needs a home the type doesn't give it. Rather than edit the
+CONTRACT type, the parser points each param's `span` at the binding-name
+token, so the evaluator (and Phase 1 hover) recover it with
+`source.slice(span.start, span.end)`. Deliberate trade: spans become
+semantics for this one field. If a later phase wants an explicit `bind`
+field, that's a contract-change entry then.

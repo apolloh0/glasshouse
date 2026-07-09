@@ -82,6 +82,7 @@ export function lex(source: string): Token[] {
 
     if (i >= n) break;
     const c = source[i]!;
+    if (c !== "\n") atLineStart = false; // a continuation line is underway
 
     // ---- newline ----
     if (c === "\n") {
