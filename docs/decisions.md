@@ -145,3 +145,22 @@ token, so the evaluator (and Phase 1 hover) recover it with
 `source.slice(span.start, span.end)`. Deliberate trade: spans become
 semantics for this one field. If a later phase wants an explicit `bind`
 field, that's a contract-change entry then.
+
+**D31 — The step/row accounting model (frozen by the first goldens).**
+One trace row per: expression completion, statement completion, state/local
+WRITE (state decls, assignments, and loop-counter binds each iteration —
+nodeId = the declaring/assigning/loop node), and callEnter/callExit around
+USER definition calls only (builtins complete as one expr row). Every row
+consumes one step index in BOTH modes (ops serialize stepIndex, so fast and
+instrumented must number identically); ops carry the emitting call's
+completion index. Write rows precede their statement's completion row
+(post-state scrubbing shows the write applied). Definitions, frame blocks,
+and event blocks are containers, not steps. Param binds are NOT write rows
+(callEnter marks the boundary; revisiting this would change every golden).
+The 5000-iteration stress program lands at exactly 50,007 rows/frame.
+
+**D32 — Phase 0 perf gate numbers (Gate C, 2026-07-08).** Medians on the
+dev machine: parse+fast @50k steps 2.14 ms (budget 100); instrumented @50k
+3.68 ms (budget 30); fast @5k 0.19 ms (budget 5). Stress honesty check:
+50,007 steps/frame. No micro-optimization was needed; the escalation path
+(compile-to-closures, spec §7) remains unbuilt.
