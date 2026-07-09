@@ -17,6 +17,19 @@
     .chalk-card .ctx { color: #666; }
     .chalk-linked { background: #fff3bf; }
     #status { color: #666; min-height: 2em; }
+    #controls { display: flex; gap: 8px; align-items: center; }
+    #controls input[type=range] { flex: 1; }
+    #controls label { white-space: nowrap; color: #444; }
+    #scrubwrap input[type=range] { width: 100%; }
+    #timeline { overflow-y: auto; flex: 1; border-top: 1px solid #eee; }
+    .tl-row { display: flex; gap: 6px; align-items: baseline; padding: 1px 0;
+              font-family: ui-monospace, monospace; font-size: 11px; }
+    .tl-text { color: #333; white-space: pre; overflow: hidden;
+               text-overflow: ellipsis; max-width: 170px; }
+    .tl-ticks { display: flex; gap: 2px; flex-wrap: wrap; }
+    .tl-tick { width: 8px; height: 8px; border: none; border-radius: 2px;
+               background: #2a76c6; cursor: pointer; padding: 0; }
+    .tl-tick.gap { background: #ddd; cursor: default; }
   </style>
 </head>
 <body>
@@ -26,7 +39,16 @@
       <canvas id="stage" width="320" height="240"></canvas>
       <canvas id="overlay" width="320" height="240"></canvas>
     </div>
+    <div id="controls">
+      <input id="frameslider" type="range" min="0" max="0" value="0" />
+      <label><input type="checkbox" id="onion" /> onion</label>
+      <label><input type="checkbox" id="trails" /> trails</label>
+    </div>
+    <div id="scrubwrap" style="display:none">
+      <input id="scrubber" type="range" min="0" max="0" value="0" />
+    </div>
     <div id="status"></div>
+    <div id="timeline"></div>
   </div>
   <script type="module" src="./main.ts"></script>
 </body>

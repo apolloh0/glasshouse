@@ -48,10 +48,15 @@ import {
 } from "../../src/editor/extensions.js";
 import { parse } from "../../src/lang/parser.js";
 import { ChalkError } from "../../src/lang/diagnostics.js";
-import { Session } from "../../src/host/run.js";
+import { Session, type TraceView } from "../../src/host/run.js";
+import { IdTracker } from "../../src/host/ids.js";
 import { renderDisplayList, renderOps } from "../../src/render/canvas2d.js";
 import { opsForSpan, spanForOp } from "../../src/ui/link.js";
 import { annotationsFor, type AnnotationOp } from "../../src/ui/annotate.js";
+import { scrubView, stepCount } from "../../src/flow/steps.js";
+import { executedStatements, iterationGrid } from "../../src/flow/lines.js";
+import { onionLayers, trailOps } from "../../src/flow/frames.js";
+import { pathAt } from "../../src/lang/walk.js";
 import type { Program } from "../../src/lang/ast.js";
 import type { DisplayList, DisplayOp } from "../../src/render/displayList.js";
 import type { FrameInputs, InputEvent } from "../../src/engine/frame.js";
@@ -62,6 +67,12 @@ const overlay = document.getElementById("overlay") as HTMLCanvasElement;
 const status = document.getElementById("status")!;
 const stageCtx = stage.getContext("2d")!;
 const overlayCtx = overlay.getContext("2d")!;
+const frameSlider = document.getElementById("frameslider") as HTMLInputElement;
+const scrubWrap = document.getElementById("scrubwrap") as HTMLElement;
+const scrubber = document.getElementById("scrubber") as HTMLInputElement;
+const onionToggle = document.getElementById("onion") as HTMLInputElement;
+const trailsToggle = document.getElementById("trails") as HTMLInputElement;
+const timeline = document.getElementById("timeline")!;
 
 // ---------- program / session state ----------
 
@@ -70,6 +81,10 @@ let session: Session | null = null;
 let isAnimated = false;
 let lastDisplay: DisplayList | null = null;
 let rafHandle = 0;
+const idTracker = new IdTracker();
+
+// Phase 2: the focused frame (scrubber + timeline operate on it)
+let focused: { k: number; view: TraceView; staticOpsCount: number } | null = null;
 
 // pointer input, converted to FrameInputs immediately (the ONE ambient input)
 const pointer = { x: 0, y: 0, down: false };
@@ -86,20 +101,39 @@ function drainInputs(): FrameInputs {
 
 // ---------- rendering ----------
 
-function render(display: DisplayList): void {
+/** One paint pipeline: bg, ghost layers (when focused), then ops [0, upToOp)
+ *  — with Phase 1 selection emphasis when a code selection is active. */
+function render(display: DisplayList, upToOp: number = display.ops.length): void {
   lastDisplay = display;
   stageCtx.globalAlpha = 1;
+  renderDisplayList(stageCtx, display, 0); // bg only
+  if (focused && session && isAnimated) {
+    if (onionToggle.checked) {
+      for (const layer of onionLayers(focused.k, session.frameCount())) {
+        stageCtx.globalAlpha = layer.alpha;
+        renderOps(stageCtx, session.displayAt(layer.frame).ops);
+      }
+    }
+    if (trailsToggle.checked) {
+      for (const slice of trailOps((k) => session!.displayAt(k), focused.k, 8, 4)) {
+        stageCtx.globalAlpha = 0.25;
+        renderOps(stageCtx, slice.ops);
+      }
+    }
+  }
+  const shown = display.ops.slice(0, Math.min(upToOp, display.ops.length));
   if (selectedOps !== null) {
     // full picture faint, selected ops at full alpha (indices preserved so
     // hit-testing keeps working against the full list)
-    renderDisplayList(stageCtx, display, 0); // bg only
     stageCtx.globalAlpha = 0.25;
-    renderOps(stageCtx, display.ops);
+    renderOps(stageCtx, shown);
     stageCtx.globalAlpha = 1;
-    renderOps(stageCtx, selectedOps.flatMap((i) => display.ops[i] ?? []));
+    renderOps(stageCtx, selectedOps.flatMap((i) => (i < shown.length ? [shown[i]!] : [])));
   } else {
-    renderDisplayList(stageCtx, display);
+    stageCtx.globalAlpha = 1;
+    renderOps(stageCtx, shown);
   }
+  stageCtx.globalAlpha = 1;
 }
 
 function tick(): void {
@@ -108,6 +142,8 @@ function tick(): void {
     const display = session.advance(drainInputs());
     render(display);
     status.textContent = "frame " + session.frameCount();
+    frameSlider.max = String(Math.max(0, session.frameCount() - 1));
+    frameSlider.value = frameSlider.max;
     rafHandle = requestAnimationFrame(tick);
   } catch (e) {
     // A frame-time ChalkError (setup was fine): freeze on the last good
@@ -124,14 +160,21 @@ function rebuild(doc: string): void {
   try {
     const program = parse(doc);
     lastGoodProgram = program;
+    idTracker.advance(program); // stable ids survive the re-parse (D16)
     session = new Session(doc, 42);
     isAnimated = program.frames.length > 0 || program.events.length > 0;
     selectedOps = null;
+    const wasFocused = focused !== null;
+    focused = null;
     if (isAnimated) {
+      scrubWrap.style.display = "none";
       rafHandle = requestAnimationFrame(tick);
     } else {
-      render(session.displayAt(0));
-      status.textContent = "";
+      frameSlider.max = "0";
+      frameSlider.value = "0";
+      // a static picture is always "focused": the scrubber scrubs the
+      // DRAWING; an edit mid-scrub re-anchors instead of jumping to the end
+      focusFrame(0, { keepScrubPosition: wasFocused });
     }
   } catch (e) {
     if (!(e instanceof ChalkError)) throw e;
@@ -163,6 +206,156 @@ const view = new EditorView({
   ],
 });
 
+// ---------- Phase 2: focus, scrub, timeline, ghosts ----------
+
+/** Frame ops in a trace = the largest opEnd any row reached; everything
+ *  before them in the display is the static prefix (0 for setup traces). */
+function staticPrefixOf(view: TraceView): number {
+  let frameOps = 0;
+  for (let s = 0; s < view.trace.count; s++) {
+    const end = view.trace.row(s).opEnd;
+    if (end > frameOps) frameOps = end;
+  }
+  return view.display.ops.length - frameOps;
+}
+
+function focusFrame(k: number, opts: { keepScrubPosition?: boolean } = {}): void {
+  if (!session || !lastGoodProgram) return;
+  const view = isAnimated ? session.traceAt(k) : session.traceSetup();
+  focused = { k, view, staticOpsCount: staticPrefixOf(view) };
+  scrubWrap.style.display = "";
+  const last = Math.max(0, stepCount(view) - 1);
+  scrubber.max = String(last);
+  scrubber.value = opts.keepScrubPosition
+    ? String(Math.min(Number(scrubber.value), last)) // re-anchor sanely
+    : String(last); // fresh focus shows the finished frame
+  applyScrub();
+  renderTimeline();
+}
+
+function unfocus(): void {
+  focused = null;
+  scrubWrap.style.display = "none";
+  timeline.replaceChildren();
+  view.dispatch({ effects: setCodeHighlight.of(null) });
+}
+
+function applyScrub(): void {
+  if (!focused || !lastGoodProgram) return;
+  const step = Number(scrubber.value);
+  const v = scrubView(lastGoodProgram, focused.staticOpsCount, focused.view, step);
+  render(focused.view.display, v.upToOp);
+  view.dispatch({ effects: setCodeHighlight.of({ start: v.span.start, end: v.span.end }) });
+  status.textContent =
+    (isAnimated ? "frame " + focused.k + " · " : "") +
+    "step " + step + " / " + Math.max(0, stepCount(focused.view) - 1);
+}
+
+frameSlider.addEventListener("input", () => {
+  if (!session) return;
+  cancelAnimationFrame(rafHandle); // dragging pauses playback
+  const k = Math.min(Number(frameSlider.value), Math.max(0, session.frameCount() - 1));
+  if (isAnimated) {
+    render(session.displayAt(k));
+    status.textContent = "frame " + k;
+    focusFrame(k);
+  }
+});
+
+frameSlider.addEventListener("change", () => {
+  // releasing at the newest frame resumes playback
+  if (!session || !isAnimated) return;
+  if (frameSlider.value === frameSlider.max) {
+    unfocus();
+    rafHandle = requestAnimationFrame(tick);
+  }
+});
+
+scrubber.addEventListener("input", applyScrub);
+onionToggle.addEventListener("change", () => { if (focused) applyScrub(); });
+trailsToggle.addEventListener("change", () => { if (focused) applyScrub(); });
+
+// ---------- Phase 2: the timeline pane (rows keyed by STABLE id) ----------
+
+const rowCache = new Map<number, { el: HTMLElement; text: HTMLElement; ticks: HTMLElement }>();
+
+function firstLineAt(spanStart: number, spanEnd: number): string {
+  const src = lastGoodProgram!.source;
+  const nl = src.indexOf("\n", spanStart);
+  const end = nl === -1 ? spanEnd : Math.min(nl, spanEnd);
+  return src.slice(spanStart, end).trim();
+}
+
+/** The innermost repeat/for under the editor cursor, if any. */
+function loopUnderCursor(): number | null {
+  if (!lastGoodProgram) return null;
+  const pos = view.state.selection.main.head;
+  const hit = [...pathAt(lastGoodProgram, pos)].reverse()
+    .find((n) => n.kind === "repeat" || n.kind === "for");
+  return hit ? hit.id : null;
+}
+
+function tickButton(step: number | null): HTMLElement {
+  const b = document.createElement("button");
+  b.className = step === null ? "tl-tick gap" : "tl-tick";
+  if (step !== null) {
+    b.title = "step " + step;
+    b.addEventListener("click", () => {
+      scrubber.value = String(step);
+      applyScrub();
+    });
+  }
+  return b;
+}
+
+function timelineRow(stableId: number): { el: HTMLElement; text: HTMLElement; ticks: HTMLElement } {
+  let entry = rowCache.get(stableId);
+  if (!entry) {
+    const el = document.createElement("div");
+    el.className = "tl-row";
+    const text = document.createElement("span");
+    text.className = "tl-text";
+    const ticks = document.createElement("span");
+    ticks.className = "tl-ticks";
+    el.append(text, ticks);
+    entry = { el, text, ticks };
+    rowCache.set(stableId, entry);
+  }
+  return entry;
+}
+
+function renderTimeline(): void {
+  if (!focused || !lastGoodProgram) return;
+  const seen = new Set<HTMLElement>();
+  const loop = loopUnderCursor();
+  if (loop !== null) {
+    // the loop under the cursor swaps in its iteration grid
+    const grid = iterationGrid(lastGoodProgram, focused.view, loop);
+    for (const row of grid.rows) {
+      const sid = idTracker.stableOf(row.nodeId);
+      if (sid === undefined) continue;
+      const entry = timelineRow(sid);
+      entry.text.textContent = firstLineAt(row.span.start, row.span.end);
+      entry.ticks.replaceChildren(...row.cells.map(tickButton));
+      timeline.appendChild(entry.el);
+      seen.add(entry.el);
+    }
+  } else {
+    for (const row of executedStatements(lastGoodProgram, focused.view)) {
+      const sid = idTracker.stableOf(row.nodeId);
+      if (sid === undefined) continue;
+      const entry = timelineRow(sid);
+      entry.text.textContent = firstLineAt(row.span.start, row.span.end);
+      entry.ticks.replaceChildren(...row.steps.map(tickButton));
+      timeline.appendChild(entry.el);
+      seen.add(entry.el);
+    }
+  }
+  for (const child of Array.from(timeline.children)) {
+    if (!seen.has(child as HTMLElement)) child.remove();
+  }
+}
+
 // ---------- code -> stage (selection dimming) ----------
 
 function onSelection(): void {
@@ -170,11 +363,12 @@ function onSelection(): void {
   const range = view.state.selection.main;
   if (range.empty) {
     if (selectedOps !== null) { selectedOps = null; redraw(); }
-    return;
+  } else {
+    const ops = opsForSpan(lastDisplay.ops, lastGoodProgram, { start: range.from, end: range.to });
+    selectedOps = ops.length > 0 ? ops : null;
+    redraw();
   }
-  const ops = opsForSpan(lastDisplay.ops, lastGoodProgram, { start: range.from, end: range.to });
-  selectedOps = ops.length > 0 ? ops : null;
-  redraw();
+  if (focused) renderTimeline(); // cursor moving in/out of a loop swaps views
 }
 
 function redraw(): void {
