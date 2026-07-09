@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "studio",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "apps/studio", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}
