@@ -49,8 +49,13 @@ export class Session {
 
   frameCount(): number { return this.history.frameCount(); }
 
-  /** Exact display list for any recorded frame (ring hit or keyframe replay). */
+  /** Exact display list for any recorded frame (ring hit or keyframe replay).
+   *  A static picture (no frame/event blocks, D5) draws once at setup and
+   *  that display IS every frame — no history needed. */
   displayAt(k: number): DisplayList {
+    if (this.program.frames.length === 0 && this.program.events.length === 0) {
+      return { bg: this.staticLayer.bg, ops: this.staticLayer.ops };
+    }
     const hit = this.history.displayAt(k);
     if (hit !== null) return hit;
     const state = this.stateAt(k);
