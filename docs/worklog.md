@@ -66,6 +66,7 @@ golden.test.ts iterates every case file, so its golden must exist NOW for
 the suite to be green; P3-T7 will regenerate it and assert byte-identity
 (the engine is frozen, so this is a no-op check). Deviation from the
 "generated at P3-T7" instruction recorded here deliberately.
+Reviewed: deviation approved; P3-T7 becomes a byte-identity re-check.
 
 ## T9 — determinism suite — 2026-07-08
 Done: whole file passes unmodified (same-seed identity over 240 frames,
@@ -92,3 +93,4 @@ Gate C ✓ budgets met, numbers above and in decisions D32.
 T11 (debug UI) not built: no Phase 0 gate depends on it and the session
 brief scoped Phase 0 to T1–T9 + gates. apps/debug still has its TODO;
 revisit if a human wants to feel replay before Phase 2's studio wiring.
+Reviewed: T11 skip approved; apps/debug is retired at Phase 4 design.

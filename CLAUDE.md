@@ -104,6 +104,22 @@ Do not reach for the compiler before the walker is proven too slow.
 
 - One task per session where possible; finish with `npm test` + `npm run
   typecheck` output pasted into the commit message body.
+- **Standing workflow rules (from the Phase 0 brief; apply to every phase):**
+  - Commit after every task with a test-delta message, e.g.
+    `"T4: evaluator fast mode — tests 17→31 green"`. Run
+    `npm run typecheck && npm test` before every commit.
+  - Tag each completed gate set: `phase0-gates`, `phase1-gates`, etc.
+  - Keep `docs/worklog.md`, one entry per task:
+    `## <task> — <date>` / `Done: <one line>. Tests: <before>→<after> green.`
+    / `Surprises/deviations:` / `Open questions for Phase 4+:`.
+  - At each phase end, run `PERF=1 npm run bench` and paste ALL numbers into
+    the worklog with headroom vs the budgets above.
+  - Gates G, L, and P are HUMAN tests. Never self-certify: present the
+    manual script from the spec, mark the gate "pending human", wait for
+    the reported result, and record it in `docs/decisions.md`.
+  - Never modify `// CONTRACT` files or tests; propose changes as new
+    `docs/decisions.md` entries and stop for review.
+  - Work one phase per session; suggest `/clear` at phase boundaries.
 - Goldens: first successful implementation run uses `npm run test:update`,
   then commit the generated files under `tests/golden/cases/` and eyeball them.
 - Keep stubs' `TODO("Tn")`/`TODO("P1-Tn")` markers until the task's tests

@@ -145,6 +145,8 @@ token, so the evaluator (and Phase 1 hover) recover it with
 `source.slice(span.start, span.end)`. Deliberate trade: spans become
 semantics for this one field. If a later phase wants an explicit `bind`
 field, that's a contract-change entry then.
+*Reviewed and approved; expect promotion to an explicit `bind` field as a
+contract change at Phase 4/5 design (the "teach this" gesture needs it).*
 
 **D31 — The step/row accounting model (frozen by the first goldens).**
 One trace row per: expression completion, statement completion, state/local
@@ -158,6 +160,7 @@ completion index. Write rows precede their statement's completion row
 and event blocks are containers, not steps. Param binds are NOT write rows
 (callEnter marks the boundary; revisiting this would change every golden).
 The 5000-iteration stress program lands at exactly 50,007 rows/frame.
+*Reviewed and approved; verified against the Phase 2/3 test expectations.*
 
 **D32 — Phase 0 perf gate numbers (Gate C, 2026-07-08).** Medians on the
 dev machine: parse+fast @50k steps 2.14 ms (budget 100); instrumented @50k
