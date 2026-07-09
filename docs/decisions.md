@@ -202,3 +202,17 @@ type field was the odd one out (2-to-1 inside the contract itself), so it
 was renamed to `deg`. This is the first edit to a CONTRACT type in the
 repo — a mechanical self-consistency repair, not a semantic change;
 flagged for review.
+
+**PROPOSAL (pending review) — tests/stack.test.ts needle collision.** The
+fixture helper resolves `at("house(at:", "call")` via
+`src.indexOf("house(at:")`, which lands on the DEFINITION HEADER
+(`to house(at: base, height: h):`, line 4, offset 105) where the path is
+only the `to` node — no `call` node exists there, so the lookup is
+unsatisfiable for any correct parser/pathAt (verified empirically; the
+call site the test means is on line 14, node id 54). The sibling hover
+test avoided this with a collision-free needle ("height: 40"). Proposed
+one-line fix, needs sign-off since tests are review-owned: change the
+needle to `"house(at: (20"` (both uses). The P3-T5 implementation itself
+is verified against every assertion under the corrected needle (scratch
+harness; rect completions [30,94,158,222,286] all attribute to site 54;
+paper -> -1; post-state callStackAt exact).

@@ -16,12 +16,20 @@
 //  completions attribute to the single house(...) call site in the repeat.
 
 import type { NodeId, Program } from "../lang/ast.js";
+import { STEP_KIND } from "../engine/trace.js";
 import type { TraceView } from "../host/run.js";
-import { TODO } from "../util/todo.js";
 
 export function callStackAt(view: TraceView, step: number): NodeId[] {
-  void view; void step;
-  TODO("P3-T5", "post-state stack per header");
+  const stack: NodeId[] = [];
+  const trace = view.trace;
+  const last = Math.min(step, trace.count - 1);
+  for (let s = 0; s <= last; s++) {
+    const row = trace.row(s);
+    if (row.kind === STEP_KIND.callEnter) stack.push(row.nodeId);
+    else if (row.kind === STEP_KIND.callExit) stack.pop();
+    // post-state (D20): an exit AT step s has already closed its call.
+  }
+  return stack;
 }
 
 export interface CallSiteGroup {
@@ -34,6 +42,21 @@ export function callSitesFor(
   view: TraceView,
   nodeId: NodeId,
 ): CallSiteGroup[] {
-  void program; void view; void nodeId;
-  TODO("P3-T5");
+  void program; // attribution is trace-side
+  const trace = view.trace;
+  const groups = new Map<NodeId, number[]>();
+  const order: NodeId[] = []; // entries ordered by first step
+  const stack: NodeId[] = [];
+  for (let s = 0; s < trace.count; s++) {
+    const row = trace.row(s);
+    if (row.kind === STEP_KIND.callEnter) { stack.push(row.nodeId); continue; }
+    if (row.kind === STEP_KIND.callExit) { stack.pop(); continue; }
+    if (row.nodeId !== nodeId) continue;
+    if (row.kind !== STEP_KIND.stmt && row.kind !== STEP_KIND.expr) continue;
+    const site = stack.length > 0 ? stack[stack.length - 1]! : -1;
+    const list = groups.get(site);
+    if (list) list.push(s);
+    else { groups.set(site, [s]); order.push(site); }
+  }
+  return order.map((site) => ({ site, steps: groups.get(site)! }));
 }
