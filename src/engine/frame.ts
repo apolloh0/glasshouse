@@ -1,5 +1,5 @@
 // CONTRACT — the frame loop API (plan §5.2). Frame index is the only clock.
-import type { Program } from "../lang/ast.js";
+import type { EventBlock, Program } from "../lang/ast.js";
 import type { Value } from "./values.js";
 import { encodeValue } from "./values.js";
 import type { Prng } from "./prng.js";
@@ -7,7 +7,6 @@ import { makePrng } from "./prng.js";
 import type { DisplayList, DisplayOp, Rgb } from "../render/displayList.js";
 import { StepStore, STEP_KIND, VTAG } from "./trace.js";
 import { execBlock, type EvalContext, type Tracer } from "./evaluator.js";
-import { TODO } from "../util/todo.js";
 
 export type InputEvent =
   | { type: "pointer-pressed"; x: number; y: number }
@@ -124,6 +123,36 @@ export function evalFrame(
   inputs: FrameInputs,
   mode: EvalMode,
 ): FrameResult {
-  void program; void staticLayer; void state; void inputs; void mode;
-  TODO("T5", "evalFrame");
+  const ops: DisplayOp[] = [];
+  const { trace, tracer } = makeTracer(mode, ops);
+  const ctx: EvalContext = {
+    program,
+    vars: state.vars,
+    locals: [],
+    rng: state.rng,
+    inputs,
+    ops,
+    bg: staticLayer.bg,
+    inSetup: false,
+    stepIndex: 0,
+    tracer,
+  };
+  for (const frame of program.frames) execBlock(ctx, frame.body);
+  for (const event of program.events) {
+    for (const fired of inputs.events) {
+      if (matches(event, fired)) execBlock(ctx, event.body);
+    }
+  }
+  state.frameIndex++;
+  return {
+    display: { bg: staticLayer.bg, ops: staticLayer.ops.concat(ops) },
+    state,
+    trace,
+  };
+}
+
+function matches(block: EventBlock, fired: InputEvent): boolean {
+  const spec = block.event;
+  if (spec.kind === "pointer") return fired.type === "pointer-" + spec.which;
+  return fired.type === "key" && fired.key === spec.key;
 }
