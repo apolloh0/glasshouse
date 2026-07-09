@@ -193,3 +193,12 @@ Phase 4 attaches heavier state to stable ids. Pinned by
 tests/match-tightening.test.ts (circle->rect rewrite is drop+mint for the
 call and its arguments; the statement SLOT — the ExprStmt — may still
 carry). Pass 1 is unaffected (fingerprints already include callees).
+
+**D34 — Glyph tick field is `deg` (one-word CONTRACT typo fix).** The Glyph
+union in src/ui/glyphs.ts declared `{ kind: "tick"; degrees: number }` while
+its own header rule says `{ kind:"tick", deg }` and tests/glyphs.test.ts
+pins `{ kind: "tick", deg: 30 }`. No implementation satisfies both; the
+type field was the odd one out (2-to-1 inside the contract itself), so it
+was renamed to `deg`. This is the first edit to a CONTRACT type in the
+repo — a mechanical self-consistency repair, not a semantic change;
+flagged for review.

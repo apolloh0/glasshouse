@@ -13,9 +13,15 @@
 //          contain quotes; the lexer guarantees it)
 
 import type { Value } from "../engine/values.js";
-import { TODO } from "../util/todo.js";
+import { fmtNum } from "./annotate.js";
 
 export function showValue(v: Value): string {
-  void v;
-  TODO("P3-T1", "pinned forms per header; reuse fmtNum");
+  switch (v.t) {
+    case "num": return fmtNum(v.v);
+    case "point": return "(" + fmtNum(v.x) + ", " + fmtNum(v.y) + ")";
+    case "color": return "#" + (v.rgb >>> 0).toString(16).padStart(6, "0").toUpperCase();
+    case "angle": return fmtNum(v.deg) + "°";
+    case "bool": return v.v ? "true" : "false";
+    case "str": return '"' + v.v + '"';
+  }
 }
