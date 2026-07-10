@@ -29,7 +29,12 @@
 import type { Program } from "../lang/ast.js";
 import type { DisplayList } from "../render/displayList.js";
 import type { Diagnostic } from "../lang/diagnostics.js";
-import { TODO } from "../util/todo.js";
+import { ChalkError } from "../lang/diagnostics.js";
+import { parse } from "../lang/parser.js";
+import { evalFrame, NO_INPUT, runSetup } from "../engine/frame.js";
+import { BUILTINS } from "../engine/stdlib.js";
+import type { Value } from "../engine/values.js";
+import { showValue } from "./format.js";
 
 /** Per-type argument fallbacks (D38) — the plan's own example values. */
 export const FALLBACK_DEFAULTS = {
@@ -59,13 +64,68 @@ export interface Completion {
   kind: "builtin" | "definition" | "construct";
 }
 
+/** The full default-args statement for a builtin (D38): stdlib dflt where
+ *  present, else FALLBACK_DEFAULTS by type — both via showValue, whose
+ *  output is valid Chalk. Shared with the palette (one source of text). */
+export function defaultStatementFor(name: string): string | null {
+  const spec = BUILTINS.get(name);
+  if (!spec || (spec.kind !== "draw" && spec.kind !== "paper")) return null;
+  const args = spec.params.map((p) => {
+    const v: Value = p.dflt ?? (FALLBACK_DEFAULTS[
+      p.type === "num" ? "num"
+      : p.type === "point" ? "point"
+      : p.type === "color" ? "color"
+      : p.type === "angle" ? "angle"
+      : "str"] as Value);
+    return p.label + ": " + showValue(v);
+  });
+  return name + "(" + args.join(", ") + ")";
+}
+
+/** The word (name characters) ending at `offset`, for prefix filtering. */
+function prefixAt(source: string, offset: number): string {
+  let start = offset;
+  while (start > 0 && /[A-Za-z0-9_]/.test(source[start - 1]!)) start--;
+  return source.slice(start, offset);
+}
+
+/** True when the prefix's start sits at the beginning of a line's content. */
+function atStatementStart(source: string, offset: number): boolean {
+  let start = offset;
+  while (start > 0 && /[A-Za-z0-9_]/.test(source[start - 1]!)) start--;
+  for (let i = start - 1; i >= 0; i--) {
+    const ch = source[i]!;
+    if (ch === "\n") return true;
+    if (ch !== " ") return false;
+  }
+  return true; // start of the document
+}
+
 export function completionsAt(
   program: Program | null,
   source: string,
   offset: number,
 ): Completion[] {
-  void program; void source; void offset;
-  TODO("P4a-T4", "candidates + prefix filter per header");
+  if (!atStatementStart(source, offset)) return [];
+  const prefix = prefixAt(source, offset);
+
+  const out: Completion[] = [];
+  for (const [name, spec] of BUILTINS) {
+    if (spec.kind !== "draw") continue;
+    out.push({ label: name, insert: defaultStatementFor(name)!, kind: "builtin" });
+  }
+  out.push({ label: "paper", insert: defaultStatementFor("paper")!, kind: "builtin" });
+  if (program) {
+    for (const item of program.items) {
+      if (item.kind !== "to") continue;
+      const args = item.params.map((p) => p.name + ": 0").join(", ");
+      out.push({ label: item.name, insert: item.name + "(" + args + ")", kind: "definition" });
+    }
+  }
+  for (const t of CONSTRUCT_TEMPLATES) {
+    out.push({ label: t.label, insert: t.insert, kind: "construct" });
+  }
+  return prefix === "" ? out : out.filter((c) => c.label.startsWith(prefix));
 }
 
 export type Preview =
@@ -73,6 +133,18 @@ export type Preview =
   | { ok: false; error: Diagnostic };
 
 export function previewFor(source: string, seed: number): Preview {
-  void source; void seed;
-  TODO("P4a-T4", "session-isolated setup + <=1 frame per header");
+  // Session-isolated on purpose (D38): engine functions on fresh state — no
+  // History, no live Session, nothing shared with the caller's world.
+  try {
+    const program = parse(source);
+    const { state, staticLayer } = runSetup(program, seed);
+    if (program.frames.length === 0 && program.events.length === 0) {
+      return { ok: true, display: { bg: staticLayer.bg, ops: staticLayer.ops } };
+    }
+    const result = evalFrame(program, staticLayer, state, NO_INPUT, "fast");
+    return { ok: true, display: result.display };
+  } catch (e) {
+    if (e instanceof ChalkError) return { ok: false, error: e.diagnostic };
+    throw e; // non-Chalk exceptions are bugs
+  }
 }
