@@ -31,10 +31,13 @@
 // in exactly that order, len default 24. The studio draws it on the
 // annotation overlay (never into display lists — D13 family).
 
-import type { NodeId, Program } from "../lang/ast.js";
+import type { GroupBlock, NodeId, Program } from "../lang/ast.js";
 import type { Value } from "../engine/values.js";
+import { decodeValue } from "../engine/values.js";
+import { STEP_KIND } from "../engine/trace.js";
+import { visit } from "../lang/walk.js";
 import type { TraceView } from "../host/run.js";
-import { TODO } from "../util/todo.js";
+import { callStackAt } from "./stack.js";
 
 /** Canvas-order affine matrix. */
 export interface Mat { a: number; b: number; c: number; d: number; e: number; f: number }
@@ -61,8 +64,25 @@ export function applyMat(m: Mat, x: number, y: number): { x: number; y: number }
 export function matrixFor(args: {
   move?: Value; rotate?: Value; scale?: Value; around?: Value;
 }): Mat {
-  void args;
-  TODO("P4a-T3", "T(move)·T(around)·R·S·T(-around) per header");
+  const move = args.move && args.move.t === "point" ? args.move : { x: 0, y: 0 };
+  const deg = args.rotate === undefined ? 0
+    : args.rotate.t === "angle" ? args.rotate.deg
+    : args.rotate.t === "num" ? args.rotate.v
+    : 0;
+  const s = args.scale && args.scale.t === "num" ? args.scale.v : 1;
+  const around = args.around && args.around.t === "point" ? args.around : { x: 0, y: 0 };
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  // R·S about the origin, conjugated by `around`, then the move. Normalize
+  // -0 (e.g. -sin*s at deg 0) so identity is exactly IDENTITY.
+  const z = (n: number): number => (Object.is(n, -0) ? 0 : n);
+  const a = cos * s, b = sin * s, c = -sin * s, d = cos * s;
+  return {
+    a: z(a), b: z(b), c: z(c), d: z(d),
+    e: z(move.x + around.x - (a * around.x + c * around.y)),
+    f: z(move.y + around.y - (b * around.x + d * around.y)),
+  };
 }
 
 export interface ActiveGroup {
@@ -77,8 +97,55 @@ export function activeGroupsAt(
   view: TraceView,
   step: number,
 ): ActiveGroup[] {
-  void program; void view; void step;
-  TODO("P4a-T3", "lexical containment + open call sites per header");
+  const trace = view.trace;
+  if (trace.count === 0) return [];
+  const clamped = Math.max(0, Math.min(step, trace.count - 1));
+
+  // Groups, outermost first = pre-order; plus every node's span for the
+  // lexical-containment checks.
+  const groups: GroupBlock[] = [];
+  const spanOf = new Map<NodeId, { start: number; end: number }>();
+  visit(program, (node) => {
+    spanOf.set(node.id, node.span);
+    if (node.kind === "group") groups.push(node);
+  });
+  if (groups.length === 0) return [];
+
+  // Positions that must be lexically inside an active group: the completing
+  // node, plus any call site open at s (code reached through a definition
+  // call is dynamically inside the group without being lexically inside).
+  const anchors: { start: number; end: number }[] = [];
+  const completing = spanOf.get(trace.row(clamped).nodeId);
+  if (completing) anchors.push(completing);
+  for (const site of callStackAt(view, clamped)) {
+    const span = spanOf.get(site);
+    if (span) anchors.push(span);
+  }
+
+  const contains = (outer: { start: number; end: number }, inner: { start: number; end: number }): boolean =>
+    outer.start <= inner.start && inner.end <= outer.end;
+
+  const active: ActiveGroup[] = [];
+  for (const g of groups) {
+    if (!anchors.some((a) => contains(g.span, a))) continue;
+    // Arg values: the LATEST completion of each arg expr at step <= s
+    // (loops re-evaluate args every pass).
+    const args: { move?: Value; rotate?: Value; scale?: Value; around?: Value } = {};
+    for (const arg of g.args) {
+      let latest: Value | undefined;
+      for (let s2 = 0; s2 <= clamped; s2++) {
+        const row = trace.row(s2);
+        if (row.kind !== STEP_KIND.expr || row.nodeId !== arg.value.id) continue;
+        const v = decodeValue(row.valueTag, row.a, row.b, row.strIdx, (i) => trace.string(i));
+        if (v !== null) latest = v;
+      }
+      if (latest !== undefined) {
+        args[arg.label as "move" | "rotate" | "scale" | "around"] = latest;
+      }
+    }
+    active.push({ group: g.id, matrix: matrixFor(args) });
+  }
+  return active;
 }
 
 export type AxesOp =
@@ -86,6 +153,12 @@ export type AxesOp =
   | { kind: "origin"; x: number; y: number };
 
 export function axesGlyph(m: Mat, len = 24): AxesOp[] {
-  void m; void len;
-  TODO("P4a-T3", "pinned order: x axis, y axis, origin");
+  const o = applyMat(m, 0, 0);
+  const xTip = applyMat(m, len, 0);
+  const yTip = applyMat(m, 0, len);
+  return [
+    { kind: "axis", x1: o.x, y1: o.y, x2: xTip.x, y2: xTip.y, label: "x" },
+    { kind: "axis", x1: o.x, y1: o.y, x2: yTip.x, y2: yTip.y, label: "y" },
+    { kind: "origin", x: o.x, y: o.y },
+  ];
 }
