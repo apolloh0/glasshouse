@@ -56,7 +56,16 @@ import { annotationsFor, type AnnotationOp } from "../../src/ui/annotate.js";
 import { scrubView, stepCount } from "../../src/flow/steps.js";
 import { executedStatements, iterationGrid } from "../../src/flow/lines.js";
 import { onionLayers, trailOps } from "../../src/flow/frames.js";
-import { pathAt } from "../../src/lang/walk.js";
+import { stateRows, varsAtStep, varSeries, sparkline } from "../../src/flow/state.js";
+import {
+  cellZoomMode, numericSummary, stridedSamples, valueCells, valuesForNode,
+} from "../../src/flow/cells.js";
+import { diffDisplay } from "../../src/flow/diff.js";
+import { callSitesFor } from "../../src/flow/stack.js";
+import { showValue } from "../../src/ui/format.js";
+import { opBounds, thumbnailFit, valueGlyph } from "../../src/ui/glyphs.js";
+import { pathAt, children as childrenOf, type AnyNode } from "../../src/lang/walk.js";
+import type { Value } from "../../src/engine/values.js";
 import type { Program } from "../../src/lang/ast.js";
 import type { DisplayList, DisplayOp } from "../../src/render/displayList.js";
 import type { FrameInputs, InputEvent } from "../../src/engine/frame.js";
@@ -72,7 +81,10 @@ const scrubWrap = document.getElementById("scrubwrap") as HTMLElement;
 const scrubber = document.getElementById("scrubber") as HTMLInputElement;
 const onionToggle = document.getElementById("onion") as HTMLInputElement;
 const trailsToggle = document.getElementById("trails") as HTMLInputElement;
+const diffToggle = document.getElementById("diff") as HTMLInputElement;
 const timeline = document.getElementById("timeline")!;
+const statePanel = document.getElementById("statepanel")!;
+const popover = document.getElementById("popover")!;
 
 // ---------- program / session state ----------
 
@@ -192,7 +204,7 @@ const view = new EditorView({
     keymap.of([...defaultKeymap, ...historyKeymap]),
     syntaxHighlighting(defaultHighlightStyle),
     chalk(),
-    chalkHover(() => lastGoodProgram),
+    chalkHover(() => lastGoodProgram, valuesAtPos),
     chalkLint(),
     lintGutter(),
     codeHighlightField,
@@ -231,12 +243,15 @@ function focusFrame(k: number, opts: { keepScrubPosition?: boolean } = {}): void
     : String(last); // fresh focus shows the finished frame
   applyScrub();
   renderTimeline();
+  renderStatePanel();
 }
 
 function unfocus(): void {
   focused = null;
   scrubWrap.style.display = "none";
   timeline.replaceChildren();
+  statePanel.replaceChildren();
+  popover.style.display = "none";
   view.dispatch({ effects: setCodeHighlight.of(null) });
 }
 
@@ -259,6 +274,7 @@ frameSlider.addEventListener("input", () => {
     render(session.displayAt(k));
     status.textContent = "frame " + k;
     focusFrame(k);
+    if (diffToggle.checked) drawDiffOutlines(k); // what changed since k-1
   }
 });
 
@@ -274,6 +290,130 @@ frameSlider.addEventListener("change", () => {
 scrubber.addEventListener("input", applyScrub);
 onionToggle.addEventListener("change", () => { if (focused) applyScrub(); });
 trailsToggle.addEventListener("change", () => { if (focused) applyScrub(); });
+
+// ---------- Phase 3: state panel, value hover, diff outlines ----------
+
+/** Values of the most informative expression under `pos`: the enclosing
+ *  labeled argument's value if any, else the innermost expression. */
+function valuesAtPos(pos: number): string[] | null {
+  if (!focused || !lastGoodProgram) return null;
+  const path = pathAt(lastGoodProgram, pos);
+  let target: AnyNode | null = null;
+  for (const node of [...path].reverse()) {
+    if (node.kind === "call") {
+      const arg = node.args.find((a) => a.value.span.start <= pos && pos < a.value.span.end);
+      if (arg) { target = arg.value; break; }
+    }
+  }
+  if (!target) {
+    target = [...path].reverse().find((n) =>
+      ["number", "angle", "color", "bool", "string", "name", "member",
+        "binop", "unary", "point", "call"].includes(n.kind)) ?? null;
+  }
+  if (!target) return null;
+  const values = valuesForNode(focused.view, target.id);
+  if (values.length === 0) return null;
+  return stridedSamples(values, 12).map(showValue);
+}
+
+function glyphSpan(v: Value): HTMLElement {
+  const g = valueGlyph(v);
+  if (g.kind === "swatch") {
+    const el = document.createElement("span");
+    el.className = "sp-swatch";
+    el.style.background = "#" + g.rgb.toString(16).padStart(6, "0");
+    el.title = showValue(v);
+    return el;
+  }
+  const el = document.createElement("span");
+  el.className = "sp-val";
+  el.textContent = showValue(v);
+  return el;
+}
+
+function sparkCanvas(values: (number | null)[], w = 72, h = 16): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const spark = sparkline(values, w, h);
+  if (spark) {
+    const c = canvas.getContext("2d")!;
+    c.strokeStyle = "#2a76c6";
+    c.beginPath();
+    spark.points.forEach((p, i) => (i === 0 ? c.moveTo(p.x, p.y) : c.lineTo(p.x, p.y)));
+    c.stroke();
+  }
+  return canvas;
+}
+
+let lastFlashFrame = -1;
+
+function renderStatePanel(vars?: ReadonlyMap<string, Value>): void {
+  statePanel.replaceChildren();
+  if (!focused || !lastGoodProgram || !session) return;
+  const entering = isAnimated ? session.stateAt(focused.k).vars : new Map<string, Value>();
+  const rows = stateRows(lastGoodProgram, focused.view, entering);
+  const flash = focused.k !== lastFlashFrame;
+  for (const row of rows) {
+    const el = document.createElement("div");
+    el.className = "sp-row" + (flash && row.writes.length > 0 ? " flash" : "");
+    const name = document.createElement("span");
+    name.className = "sp-name";
+    name.textContent = row.name;
+    el.appendChild(name);
+    if (vars) {
+      // column hover: the world at a step (varsAtStep)
+      const v = vars.get(row.name);
+      if (v) el.appendChild(glyphSpan(v));
+    } else {
+      if (row.entering) {
+        el.appendChild(glyphSpan(row.entering));
+        el.appendChild(document.createTextNode(" → "));
+      }
+      el.appendChild(glyphSpan(row.leaving));
+      if (isAnimated) {
+        const from = Math.max(0, focused.k - 63);
+        const frames = Array.from({ length: focused.k - from + 1 }, (_, i) => from + i);
+        el.appendChild(sparkCanvas(varSeries((f) => session!.stateAt(f), row.name, frames)));
+      }
+    }
+    statePanel.appendChild(el);
+  }
+  if (isAnimated && session.frameCount() > focused.k) {
+    // inputs are state (D24): the pointer row
+    const inputs = session.inputsAt(focused.k);
+    const el = document.createElement("div");
+    el.className = "sp-row";
+    const name = document.createElement("span");
+    name.className = "sp-name";
+    name.textContent = "pointer";
+    el.appendChild(name);
+    el.appendChild(glyphSpan({ t: "point", x: inputs.pointer.x, y: inputs.pointer.y }));
+    el.appendChild(document.createTextNode(inputs.pointer.down ? " down" : " up"));
+    statePanel.appendChild(el);
+  }
+  lastFlashFrame = focused.k;
+}
+
+/** Diff outlines after a frame step: changed amber, added green, removed
+ *  red ghosts from the previous frame. */
+function drawDiffOutlines(k: number): void {
+  if (!session || k <= 0) return;
+  const a = session.displayAt(k - 1).ops;
+  const b = session.displayAt(k).ops;
+  const d = diffDisplay(a, b);
+  const outline = (ops: readonly DisplayOp[], idx: number[], color: string): void => {
+    stageCtx.strokeStyle = color;
+    stageCtx.lineWidth = 1.5;
+    for (const i of idx) {
+      const bb = opBounds([ops[i]!]);
+      if (bb) stageCtx.strokeRect(bb.x0 - 1, bb.y0 - 1, bb.x1 - bb.x0 + 2, bb.y1 - bb.y0 + 2);
+    }
+  };
+  outline(b, d.changed.map((c) => c.b), "#e8a33d");
+  outline(b, d.added, "#3da35d");
+  outline(a, d.removed, "#d64545");
+}
 
 // ---------- Phase 2: the timeline pane (rows keyed by STABLE id) ----------
 
@@ -324,6 +464,123 @@ function timelineRow(stableId: number): { el: HTMLElement; text: HTMLElement; ti
   return entry;
 }
 
+/** Phase 3 typed cells for one statement row (D26): values as figures,
+ *  op-emitting completions as exact 24x18 thumbnails, control as ticks —
+ *  or the whole row as a plot when cells would be narrower than 28px. */
+function cellElements(nodeId: number): HTMLElement[] {
+  if (!focused || !lastGoodProgram) return [];
+  const cells = valueCells(lastGoodProgram, focused.view, nodeId);
+  if (cells.length === 0) return [];
+  const nums = cells.flatMap((c) =>
+    c.kind === "value" && c.value.t === "num" ? [c.value.v] : []);
+  if (nums.length === cells.length && cellZoomMode(120 / cells.length) === "plot") {
+    const canvas = sparkCanvas(nums, 120, 16); // table-to-plot (D26)
+    canvas.title = numericSummary(nums).min + " … " + numericSummary(nums).max;
+    return [canvas];
+  }
+  return cells.map((cell) => {
+    if (cell.kind === "value") {
+      const b = document.createElement("button");
+      b.className = "tl-cell";
+      b.textContent = showValue(cell.value);
+      wireCell(b, cell.step);
+      return b;
+    }
+    if (cell.kind === "ops") {
+      const canvas = document.createElement("canvas");
+      canvas.className = "tl-thumb";
+      canvas.width = 24;
+      canvas.height = 18;
+      const ops = focused!.view.display.ops.slice(
+        focused!.staticOpsCount + cell.opStart, focused!.staticOpsCount + cell.opEnd);
+      const fit = thumbnailFit(ops, 24, 18, 2);
+      if (fit) {
+        const c = canvas.getContext("2d")!;
+        c.setTransform(fit.scale, 0, 0, fit.scale, fit.dx, fit.dy);
+        renderOps(c, ops);
+        c.setTransform(1, 0, 0, 1, 0, 0);
+      }
+      wireCell(canvas, cell.step);
+      return canvas;
+    }
+    return tickButton(cell.step);
+  });
+}
+
+/** Cell interactions (plan 13): hover scrubs the canvas to the step and
+ *  swaps the panel to varsAtStep; click jumps the scrubber there. */
+function wireCell(el: HTMLElement, step: number): void {
+  el.addEventListener("click", () => {
+    scrubber.value = String(step);
+    applyScrub();
+  });
+  el.addEventListener("mouseenter", () => {
+    if (!focused || !lastGoodProgram || !session) return;
+    const v = scrubView(lastGoodProgram, focused.staticOpsCount, focused.view, step);
+    render(focused.view.display, v.upToOp);
+    const entering = isAnimated ? session.stateAt(focused.k).vars : new Map<string, Value>();
+    renderStatePanel(varsAtStep(lastGoodProgram, focused.view, entering, step));
+  });
+  el.addEventListener("mouseleave", () => {
+    applyScrub();
+    renderStatePanel();
+  });
+}
+
+/** Row hover popover: every value the statement took this frame, capped
+ *  by stridedSamples with a numericSummary header (plan 13). */
+function rowPopoverText(nodeId: number): string | null {
+  if (!focused || !lastGoodProgram) return null;
+  const cells = valueCells(lastGoodProgram, focused.view, nodeId);
+  const values = cells.flatMap((c) => (c.kind === "value" ? [c.value] : []));
+  if (values.length === 0) return null;
+  const nums = values.flatMap((v) => (v.t === "num" ? [v.v] : []));
+  let head = values.length + (values.length === 1 ? " value" : " values");
+  if (nums.length === values.length && nums.length > 1) {
+    const s = numericSummary(nums);
+    head += " · min " + s.min + " · max " + s.max + " · mean " + Number(s.mean.toFixed(2));
+  }
+  return head + "\n" + stridedSamples(values, 16).map(showValue).join(", ");
+}
+
+function wireRowHover(entry: { el: HTMLElement; text: HTMLElement }, nodeId: number): void {
+  entry.text.onmouseenter = (ev) => {
+    const text = rowPopoverText(nodeId);
+    if (!text) return;
+    popover.textContent = text;
+    popover.style.display = "block";
+    popover.style.left = Math.min(window.innerWidth - 280, (ev as MouseEvent).clientX + 10) + "px";
+    popover.style.top = (ev as MouseEvent).clientY + 12 + "px";
+  };
+  entry.text.onmouseleave = () => { popover.style.display = "none"; };
+}
+
+/** "via house(…)" attribution chips for definition-body rows (plan 15). */
+function chipElements(nodeId: number): HTMLElement[] {
+  if (!focused || !lastGoodProgram) return [];
+  const program = lastGoodProgram;
+  const groups = callSitesFor(program, focused.view, nodeId).filter((g) => g.site !== -1);
+  return groups.map((g) => {
+    let site: AnyNode | null = null;
+    const stack: AnyNode[] = [...program.items];
+    while (stack.length > 0) {
+      const n = stack.pop()!;
+      if (n.id === g.site) { site = n; break; }
+      stack.push(...childrenOf(n));
+    }
+    const chip = document.createElement("button");
+    chip.className = "tl-chip";
+    const callee = site && site.kind === "call" ? site.callee : "?";
+    chip.textContent = "via " + callee + "(…)";
+    if (site) {
+      const span = site.span;
+      chip.addEventListener("click", () =>
+        view.dispatch({ effects: setCodeHighlight.of({ start: span.start, end: span.end }) }));
+    }
+    return chip;
+  });
+}
+
 function renderTimeline(): void {
   if (!focused || !lastGoodProgram) return;
   const seen = new Set<HTMLElement>();
@@ -337,6 +594,7 @@ function renderTimeline(): void {
       const entry = timelineRow(sid);
       entry.text.textContent = firstLineAt(row.span.start, row.span.end);
       entry.ticks.replaceChildren(...row.cells.map(tickButton));
+      wireRowHover(entry, row.nodeId);
       timeline.appendChild(entry.el);
       seen.add(entry.el);
     }
@@ -346,7 +604,11 @@ function renderTimeline(): void {
       if (sid === undefined) continue;
       const entry = timelineRow(sid);
       entry.text.textContent = firstLineAt(row.span.start, row.span.end);
-      entry.ticks.replaceChildren(...row.steps.map(tickButton));
+      const cells = cellElements(row.nodeId);
+      entry.ticks.replaceChildren(
+        ...(cells.length > 0 ? cells : row.steps.map(tickButton)),
+        ...chipElements(row.nodeId));
+      wireRowHover(entry, row.nodeId);
       timeline.appendChild(entry.el);
       seen.add(entry.el);
     }
@@ -506,6 +768,7 @@ rebuild(houseRow);
   view,
   frameCount: () => session?.frameCount() ?? 0,
   statusText: () => status.textContent,
+  valuesAt: (pos: number) => valuesAtPos(pos),
 };
 
 // ---------------------------------------------------------------------------

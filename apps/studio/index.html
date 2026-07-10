@@ -30,6 +30,25 @@
     .tl-tick { width: 8px; height: 8px; border: none; border-radius: 2px;
                background: #2a76c6; cursor: pointer; padding: 0; }
     .tl-tick.gap { background: #ddd; cursor: default; }
+    .tl-cell { font-family: ui-monospace, monospace; font-size: 10px;
+               color: #1a4a7a; cursor: pointer; border: none; background: #eef4fb;
+               border-radius: 2px; padding: 0 2px; }
+    .tl-thumb { border: 1px solid #eee; cursor: pointer; vertical-align: middle; }
+    .tl-chip { font-size: 10px; color: #7a4ea3; background: #f3ecfa;
+               border: none; border-radius: 8px; padding: 0 6px; cursor: pointer; }
+    #statepanel { border-top: 1px solid #eee; padding: 4px 0; }
+    .sp-row { display: flex; gap: 6px; align-items: center; font-size: 11px;
+              font-family: ui-monospace, monospace; padding: 1px 0; }
+    .sp-name { width: 52px; color: #333; }
+    .sp-val { color: #1a4a7a; }
+    .sp-swatch { display: inline-block; width: 10px; height: 10px;
+                 border-radius: 2px; vertical-align: middle; }
+    .sp-row.flash { animation: spflash 0.2s; }
+    @keyframes spflash { from { background: #fff3bf; } to { background: none; } }
+    #popover { position: fixed; z-index: 10; background: #fff; border: 1px solid #ccc;
+               border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.15);
+               padding: 6px 8px; font: 11px ui-monospace, monospace;
+               max-width: 260px; display: none; }
   </style>
 </head>
 <body>
@@ -43,12 +62,15 @@
       <input id="frameslider" type="range" min="0" max="0" value="0" />
       <label><input type="checkbox" id="onion" /> onion</label>
       <label><input type="checkbox" id="trails" /> trails</label>
+      <label><input type="checkbox" id="diff" /> diff</label>
     </div>
     <div id="scrubwrap" style="display:none">
       <input id="scrubber" type="range" min="0" max="0" value="0" />
     </div>
     <div id="status"></div>
+    <div id="statepanel"></div>
     <div id="timeline"></div>
+    <div id="popover"></div>
   </div>
   <script type="module" src="./main.ts"></script>
 </body>

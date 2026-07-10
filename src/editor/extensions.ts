@@ -20,10 +20,17 @@ import { diagnosticsFor } from "../ui/diagnose.js";
  *  the learner is mid-edit (a broken keystroke must not blank the labels). */
 export type ProgramSource = () => Program | null;
 
+/** Phase 3: the values the expression under `pos` took in the focused
+ *  trace — the studio resolves pos to the most informative expression (the
+ *  enclosing argument's value, else the innermost expression) and returns
+ *  canonical strings (showValue upstream). Null = nothing focused. */
+export type ValuesSource = (pos: number) => string[] | null;
+
 /** Hover: call labelAt(program, offset); render the card as
  *  <div class=chalk-card><b>title</b><p>oneLiner</p><p class=ctx>context</p></div>.
- *  Return null when labelAt does. */
-export function chalkHover(getProgram: ProgramSource): Extension {
+ *  Return null when labelAt does. Phase 3 appends the hovered literal/
+ *  expression's traced values when a frame is focused. */
+export function chalkHover(getProgram: ProgramSource, getValues?: ValuesSource): Extension {
   return hoverTooltip((_view, pos): Tooltip | null => {
     const program = getProgram();
     if (!program) return null;
@@ -52,6 +59,15 @@ export function chalkHover(getProgram: ProgramSource): Extension {
           ctx.className = "ctx";
           ctx.textContent = result.context;
           dom.appendChild(ctx);
+        }
+        if (getValues) {
+          const values = getValues(pos);
+          if (values && values.length > 0) {
+            const vals = document.createElement("p");
+            vals.className = "vals";
+            vals.textContent = "this frame: " + values.join(", ");
+            dom.appendChild(vals);
+          }
         }
         return { dom };
       },
