@@ -49,6 +49,15 @@
                border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.15);
                padding: 6px 8px; font: 11px ui-monospace, monospace;
                max-width: 260px; display: none; }
+    #palette { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0;
+               border-top: 1px solid #eee; }
+    .pal-entry { display: flex; flex-direction: column; align-items: center;
+                 gap: 2px; border: 1px solid #ddd; border-radius: 4px;
+                 padding: 4px; cursor: grab; background: #fff; font-size: 10px;
+                 color: #444; }
+    .pal-entry:hover { border-color: #2a76c6; }
+    .cm-completionPreview { display: block; border: 1px solid #eee; margin-top: 4px; }
+    .cm-number-drag { cursor: ew-resize; }
   </style>
 </head>
 <body>
@@ -69,6 +78,7 @@
     </div>
     <div id="status"></div>
     <div id="statepanel"></div>
+    <div id="palette"></div>
     <div id="timeline"></div>
     <div id="popover"></div>
   </div>

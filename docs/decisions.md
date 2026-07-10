@@ -273,3 +273,11 @@ the three scaleFactor questions on scale-spiral.chalk in under thirty
 seconds, by looking (row hover + state panel; phase3-spec §4/§6). Phase 3
 closed. Phases 0–3 complete: all automated gates green, all human gates
 recorded PASS.
+
+**D41 — @codemirror/autocomplete added (P4a-T7).** The studio's completion
+UI (plan step 17: "a CM autocomplete source from completionsAt") uses the
+official CodeMirror autocomplete package rather than a hand-rolled popup.
+It is a sibling of the six @codemirror packages already in use, editor-layer
+only (src/editor + apps; the layering bans keep it out of everything else),
+and the model stays pure in src/ui/complete.ts. Recorded per the
+no-new-dependencies-without-an-entry rule.

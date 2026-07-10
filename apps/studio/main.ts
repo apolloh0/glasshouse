@@ -42,6 +42,11 @@ import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { lintGutter } from "@codemirror/lint";
+import {
+  acceptCompletion, autocompletion, completionKeymap, startCompletion,
+  type CompletionContext, type CompletionResult,
+} from "@codemirror/autocomplete";
+import { Transaction } from "@codemirror/state";
 import { chalk } from "../../src/editor/chalkLanguage.js";
 import {
   chalkHover, chalkLint, codeHighlightField, setCodeHighlight,
@@ -57,6 +62,10 @@ import { scrubView, stepCount } from "../../src/flow/steps.js";
 import { executedStatements, iterationGrid } from "../../src/flow/lines.js";
 import { onionLayers, trailOps } from "../../src/flow/frames.js";
 import { stateRows, varsAtStep, varSeries, sparkline } from "../../src/flow/state.js";
+import { activeGroupsAt, anchorOf, axesGlyph } from "../../src/flow/transform.js";
+import { completionsAt, previewFor } from "../../src/ui/complete.js";
+import { paletteEntries } from "../../src/ui/palette.js";
+import { numberDragAt, pointHandles, widgetAt } from "../../src/ui/drag.js";
 import {
   cellZoomMode, numericSummary, stridedSamples, valueCells, valuesForNode,
 } from "../../src/flow/cells.js";
@@ -85,6 +94,7 @@ const diffToggle = document.getElementById("diff") as HTMLInputElement;
 const timeline = document.getElementById("timeline")!;
 const statePanel = document.getElementById("statepanel")!;
 const popover = document.getElementById("popover")!;
+const palette = document.getElementById("palette")!;
 
 // ---------- program / session state ----------
 
@@ -188,6 +198,7 @@ function rebuild(doc: string): void {
       // DRAWING; an edit mid-scrub re-anchors instead of jumping to the end
       focusFrame(0, { keepScrubPosition: wasFocused });
     }
+    renderPalette();
   } catch (e) {
     if (!(e instanceof ChalkError)) throw e;
     status.textContent = e.diagnostic.message; // stage keeps last good picture
@@ -207,6 +218,8 @@ const view = new EditorView({
     chalkHover(() => lastGoodProgram, valuesAtPos),
     chalkLint(),
     lintGutter(),
+    autocompletion({ override: [chalkCompletionSource] }),
+    keymap.of(completionKeymap),
     codeHighlightField,
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
@@ -260,6 +273,9 @@ function applyScrub(): void {
   const step = Number(scrubber.value);
   const v = scrubView(lastGoodProgram, focused.staticOpsCount, focused.view, step);
   render(focused.view.display, v.upToOp);
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  drawHandles();
+  drawAxes(step); // plan 21: rotated frames while scrubbing inside a group
   view.dispatch({ effects: setCodeHighlight.of({ start: v.span.start, end: v.span.end }) });
   status.textContent =
     (isAnimated ? "frame " + focused.k + " · " : "") +
@@ -413,6 +429,280 @@ function drawDiffOutlines(k: number): void {
   outline(b, d.changed.map((c) => c.b), "#e8a33d");
   outline(b, d.added, "#3da35d");
   outline(a, d.removed, "#d64545");
+}
+
+// ---------- Phase 4a: completions, palette, drags, handles, axes ----------
+
+/** Plan 17: completion source with a live preview canvas per HIGHLIGHTED
+ *  option (CM calls `info` lazily, which is exactly the throttle we want). */
+function chalkCompletionSource(cmCtx: CompletionContext): CompletionResult | null {
+  const word = cmCtx.matchBefore(/[A-Za-z_]\w*/);
+  if (!word && !cmCtx.explicit) return null;
+  const from = word ? word.from : cmCtx.pos;
+  const doc = cmCtx.state.doc.toString();
+  const comps = completionsAt(lastGoodProgram, doc, cmCtx.pos);
+  if (comps.length === 0) return null;
+  return {
+    from,
+    options: comps.map((c) => ({
+      label: c.label,
+      apply: c.insert,
+      type: c.kind === "builtin" ? "function" : c.kind === "definition" ? "method" : "keyword",
+      info: () => {
+        const candidate = doc.slice(0, from) + c.insert + doc.slice(cmCtx.pos);
+        const preview = previewFor(candidate, 42);
+        if (!preview.ok) {
+          const div = document.createElement("div");
+          div.className = "cm-completionPreview";
+          div.textContent = preview.error.message;
+          return div;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.className = "cm-completionPreview";
+        canvas.width = 64;
+        canvas.height = 48;
+        const c2 = canvas.getContext("2d")!;
+        c2.scale(64 / 320, 48 / 240);
+        renderDisplayList(c2, preview.display);
+        return canvas;
+      },
+    })),
+  };
+}
+
+/** Plan 18: the parts palette — thumbnails via previewFor + thumbnailFit;
+ *  click inserts at the cursor's statement boundary; dragging onto the
+ *  stage inserts with the first point handle rewritten to the drop point. */
+function renderPalette(): void {
+  palette.replaceChildren();
+  const doc = view.state.doc.toString();
+  for (const entry of paletteEntries(lastGoodProgram, doc)) {
+    const el = document.createElement("div");
+    el.className = "pal-entry";
+    el.draggable = true;
+    const canvas = document.createElement("canvas");
+    canvas.width = 48;
+    canvas.height = 36;
+    const preview = previewFor(entry.previewSource, 42);
+    if (preview.ok) {
+      const fit = thumbnailFit(preview.display.ops, 48, 36, 2);
+      if (fit) {
+        const c2 = canvas.getContext("2d")!;
+        c2.setTransform(fit.scale, 0, 0, fit.scale, fit.dx, fit.dy);
+        renderOps(c2, preview.display.ops);
+        c2.setTransform(1, 0, 0, 1, 0, 0);
+      }
+    }
+    const label = document.createElement("span");
+    label.textContent = entry.name;
+    el.append(canvas, label);
+    el.addEventListener("click", () => insertStatement(entry.insert));
+    el.addEventListener("dragstart", (ev) => {
+      ev.dataTransfer?.setData("text/chalk-insert", entry.insert);
+    });
+    palette.appendChild(el);
+  }
+}
+
+/** Insert a statement at the cursor's line start (one undo step). */
+function insertStatement(text: string): void {
+  const line = view.state.doc.lineAt(view.state.selection.main.head);
+  view.dispatch({
+    changes: { from: line.from, to: line.from, insert: text + "\n" },
+    userEvent: "input.complete",
+  });
+  view.focus();
+}
+
+stage.addEventListener("dragover", (ev) => ev.preventDefault());
+stage.addEventListener("drop", (ev) => {
+  ev.preventDefault();
+  const insert = ev.dataTransfer?.getData("text/chalk-insert");
+  if (!insert) return;
+  const { x, y } = stagePos(ev as unknown as MouseEvent);
+  // rewrite the statement's first literal point to the drop point with the
+  // SAME splice rules as drag.ts (pointHandles over the lone statement)
+  let text = insert;
+  try {
+    const mini = insert + "\n";
+    const handle = pointHandles(parse(mini), mini)[0];
+    if (handle) text = handle.applyBoth(x, y).trimEnd();
+  } catch {
+    // un-parseable inserts (construct templates) drop in unchanged
+  }
+  insertStatement(text);
+});
+
+/** Plans 19+20: literal drags. One gesture = one undo step: intermediate
+ *  moves skip history; the final change replays start->end with history. */
+interface Gesture {
+  startDoc: string;
+  latest: string;
+  apply: (dx: number, dy: number) => string;
+}
+let gesture: Gesture | null = null;
+
+function beginGesture(startDoc: string, apply: Gesture["apply"]): void {
+  gesture = { startDoc, latest: startDoc, apply };
+}
+
+function moveGesture(dx: number, dy: number): void {
+  if (!gesture) return;
+  const next = gesture.apply(dx, dy);
+  if (next === gesture.latest) return;
+  gesture.latest = next;
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: next },
+    annotations: Transaction.addToHistory.of(false),
+  });
+}
+
+function endGesture(): void {
+  if (!gesture) return;
+  const { startDoc, latest } = gesture;
+  gesture = null;
+  if (latest === startDoc) return;
+  // rewind (historyless), then land the whole gesture as ONE history entry
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: startDoc },
+    annotations: Transaction.addToHistory.of(false),
+  });
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: latest },
+    userEvent: "input.drag",
+  });
+}
+
+view.dom.addEventListener("mousedown", (ev) => {
+  if (!lastGoodProgram) return;
+  const pos = view.posAtCoords({ x: ev.clientX, y: ev.clientY });
+  if (pos === null) return;
+  const doc = view.state.doc.toString();
+
+  const num = numberDragAt(lastGoodProgram, doc, pos);
+  if (num) {
+    ev.preventDefault();
+    const startX = ev.clientX;
+    beginGesture(doc, (dx) => num.apply(num.value + Math.round(dx / 2) * num.step));
+    const onMove = (m: MouseEvent): void => moveGesture(m.clientX - startX, 0);
+    const onUp = (): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      endGesture();
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return;
+  }
+
+  const widget = widgetAt(lastGoodProgram, doc, pos);
+  if (widget && widget.kind === "color") {
+    ev.preventDefault();
+    const picker = document.createElement("input");
+    picker.type = "color";
+    picker.value = "#" + widget.rgb.toString(16).padStart(6, "0");
+    picker.style.position = "fixed";
+    picker.style.left = ev.clientX + "px";
+    picker.style.top = ev.clientY + "px";
+    document.body.appendChild(picker);
+    picker.addEventListener("input", () => {
+      const rgb = parseInt(picker.value.slice(1), 16);
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: widget.apply(rgb) },
+        userEvent: "input.color",
+      });
+    });
+    picker.addEventListener("change", () => picker.remove());
+    picker.click();
+    return;
+  }
+  if (widget && widget.kind === "angle") {
+    ev.preventDefault();
+    const startX = ev.clientX;
+    beginGesture(doc, (dx) => widget.apply(Math.round(widget.deg + dx / 2)));
+    const onMove = (m: MouseEvent): void => moveGesture(m.clientX - startX, 0);
+    const onUp = (): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      endGesture();
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+});
+
+/** Plan 20: point handles as rings on the overlay; literal coordinates
+ *  only (computed/world mismatch is 4b's problem, D39). */
+function drawHandles(): void {
+  if (!lastGoodProgram) return;
+  overlayCtx.strokeStyle = "#2a76c6";
+  overlayCtx.lineWidth = 1.5;
+  for (const h of pointHandles(lastGoodProgram, view.state.doc.toString())) {
+    overlayCtx.beginPath();
+    overlayCtx.arc(h.x, h.y, 5, 0, Math.PI * 2);
+    overlayCtx.stroke();
+  }
+}
+
+function handleAt(x: number, y: number): ReturnType<typeof pointHandles>[number] | null {
+  if (!lastGoodProgram) return null;
+  for (const h of pointHandles(lastGoodProgram, view.state.doc.toString())) {
+    if ((x - h.x) ** 2 + (y - h.y) ** 2 <= 64) return h;
+  }
+  return null;
+}
+
+/** Plan 21: rotated axes while the scrubber sits inside a group —
+ *  innermost brightest, labelled with the group's header text. */
+function drawAxes(step: number): void {
+  if (!focused || !lastGoodProgram) return;
+  const active = activeGroupsAt(lastGoodProgram, focused.view, step);
+  active.forEach((g, i) => {
+    const alpha = active.length === 1 ? 1 : 0.4 + (0.6 * i) / (active.length - 1);
+    overlayCtx.globalAlpha = alpha;
+    // the glyph sits at the transform's fixed point (the pivot), not the
+    // transformed local origin — anchorOf does the solve in flow
+    const glyph = axesGlyph(g.matrix);
+    const origin = glyph[2] as { x: number; y: number };
+    const anchor = anchorOf(g.matrix);
+    const dx = anchor.x - origin.x;
+    const dy = anchor.y - origin.y;
+    for (const op of glyph) {
+      if (op.kind === "axis") {
+        overlayCtx.strokeStyle = op.label === "x" ? "#d64545" : "#2a76c6";
+        overlayCtx.lineWidth = 1.5;
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(op.x1 + dx, op.y1 + dy);
+        overlayCtx.lineTo(op.x2 + dx, op.y2 + dy);
+        overlayCtx.stroke();
+      } else {
+        overlayCtx.fillStyle = "#333333";
+        overlayCtx.beginPath();
+        overlayCtx.arc(op.x + dx, op.y + dy, 2.5, 0, Math.PI * 2);
+        overlayCtx.fill();
+      }
+    }
+    overlayCtx.globalAlpha = 1;
+  });
+  if (active.length > 0) {
+    const g = active[active.length - 1]!; // innermost gets the label
+    let headerText = "";
+    visitGroups(lastGoodProgram, (node) => {
+      if (node.id === g.group) headerText = firstLineAt(node.span.start, node.span.end).replace(/:$/, "");
+    });
+    overlayCtx.font = "10px system-ui, sans-serif";
+    overlayCtx.fillStyle = "#333333";
+    overlayCtx.fillText(headerText, 4, 234);
+  }
+}
+
+function visitGroups(program: Program, fn: (node: AnyNode & { kind: "group" }) => void): void {
+  const stack: AnyNode[] = [...program.items];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    if (node.kind === "group") fn(node as AnyNode & { kind: "group" });
+    stack.push(...childrenOf(node));
+  }
 }
 
 // ---------- Phase 2: the timeline pane (rows keyed by STABLE id) ----------
@@ -724,6 +1014,7 @@ function drawAnnotations(annotations: AnnotationOp[]): void {
 
 function clearHover(): void {
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  drawHandles();
   view.dispatch({ effects: setCodeHighlight.of(null) });
 }
 
@@ -749,6 +1040,24 @@ stage.addEventListener("mousemove", (ev) => {
 });
 stage.addEventListener("mousedown", (ev) => {
   const { x, y } = stagePos(ev);
+  // point handles win over program input (plan 20)
+  const handle = handleAt(x, y);
+  if (handle) {
+    ev.preventDefault();
+    const doc = view.state.doc.toString();
+    beginGesture(doc, (dx, dy) => handle.applyBoth(handle.x + dx, handle.y + dy));
+    const startX = ev.clientX;
+    const startY = ev.clientY;
+    const onMove = (m: MouseEvent): void => moveGesture(m.clientX - startX, m.clientY - startY);
+    const onUp = (): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      endGesture();
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return;
+  }
   pointer.down = true;
   if (isAnimated) pendingEvents.push({ type: "pointer-pressed", x, y });
 });
@@ -769,6 +1078,8 @@ rebuild(houseRow);
   frameCount: () => session?.frameCount() ?? 0,
   statusText: () => status.textContent,
   valuesAt: (pos: number) => valuesAtPos(pos),
+  startCompletion: () => startCompletion(view),
+  acceptCompletion: () => acceptCompletion(view),
 };
 
 // ---------------------------------------------------------------------------

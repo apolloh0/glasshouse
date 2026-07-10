@@ -152,6 +152,19 @@ export type AxesOp =
   | { kind: "axis"; x1: number; y1: number; x2: number; y2: number; label: "x" | "y" }
   | { kind: "origin"; x: number; y: number };
 
+/** Where the axes overlay should sit (P4a-T7): the matrix's FIXED POINT —
+ *  the pivot a rotation/scale turns about (pinwheel: (160,120)). Solves
+ *  (I−A)p = t; translation-only/identity matrices have no unique fixed
+ *  point, so the transformed local origin is the honest fallback. */
+export function anchorOf(m: Mat): { x: number; y: number } {
+  const det = (1 - m.a) * (1 - m.d) - m.c * m.b;
+  if (Math.abs(det) < 1e-9) return applyMat(m, 0, 0);
+  return {
+    x: ((1 - m.d) * m.e + m.c * m.f) / det,
+    y: (m.b * m.e + (1 - m.a) * m.f) / det,
+  };
+}
+
 export function axesGlyph(m: Mat, len = 24): AxesOp[] {
   const o = applyMat(m, 0, 0);
   const xTip = applyMat(m, len, 0);
