@@ -26,7 +26,7 @@ describe("call attribution (P3-T5)", () => {
   it("attributes definition-body completions to the call site", () => {
     const { program, view, at } = fixture();
     const rectStmt = at("rect(left:", "expr");
-    const houseSite = at("house(at:", "call");
+    const houseSite = at("house(at: (20", "call");
     const groups = callSitesFor(program, view, rectStmt);
     expect(groups.length).toBe(1);
     expect(groups[0]!.site).toBe(houseSite);
@@ -42,7 +42,7 @@ describe("call attribution (P3-T5)", () => {
 
   it("callStackAt is post-state: empty at top level, open inside a call", () => {
     const { program, view, at } = fixture();
-    const houseSite = at("house(at:", "call");
+    const houseSite = at("house(at: (20", "call");
     const rectGroups = callSitesFor(program, view, at("rect(left:", "expr"));
     const insideStep = rectGroups[0]!.steps[0]!;
     expect(callStackAt(view, insideStep)).toEqual([houseSite]);

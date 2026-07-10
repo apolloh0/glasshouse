@@ -216,3 +216,8 @@ needle to `"house(at: (20"` (both uses). The P3-T5 implementation itself
 is verified against every assertion under the corrected needle (scratch
 harness; rect completions [30,94,158,222,286] all attribute to site 54;
 paper -> -1; post-state callStackAt exact).
+
+*PROPOSAL above reviewed and APPROVED (2026-07-09): needle changed to
+`"house(at: (20"` in both uses of tests/stack.test.ts, nothing else.
+Applied under explicit review sign-off — the never-modify-tests rule
+stands; this records its one sanctioned exception.*

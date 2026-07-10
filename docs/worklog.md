@@ -248,3 +248,41 @@ Reviewed: Gate L PASS recorded in decisions.md; Phase 2 findings 1–2
 approved. Follow-through: lines.ts header documents both row policies;
 pass 2 tightened per D33 (equal callees for call nodes) with a new
 pinning test, tests/match-tightening.test.ts.
+
+## P3-T1 — presentation primitives — 2026-07-09
+Done: showValue pinned forms, valueGlyph, opBounds, thumbnailFit (D26/D27).
+Tests: 129→138 green.
+Surprises/deviations: first CONTRACT edit in the repo (D34): the Glyph tick
+field was `degrees` in the type but `deg` in the same file's header rule
+AND the pinned test — no implementation satisfied both; renamed to `deg`.
+
+## P3-T2 — state model — 2026-07-09
+Done: writeEvents/varsAtStep/stateRows/varSeries/sparkline;
+Session.inputsAt (D24). Tests: 138→145 green.
+Surprises/deviations: none — T7's write-row encoding matched the state.ts
+header exactly (it was implemented FROM D25 in Phase 0), so the "reconcile
+in the evaluator" contingency was not needed and goldens were untouched.
+
+## P3-T3 — typed cells + aggregates — 2026-07-09
+Done: valueCells/valuesForNode/numericSummary/stridedSamples/cellZoomMode.
+Tests: 145→156 green — all four Gate N state-demos rode along.
+
+## P3-T4 — display diff — 2026-07-09
+Done: diffDisplay by (kind, sourceNodeId, occurrence), stepIndex excluded
+(D28). Tests: 156→161 green.
+
+## P3-T5 — call attribution — 2026-07-09
+Done: callStackAt (post-state enter/exit replay), callSitesFor (innermost
+open site per completion, -1 at top level). Tests: 161→164 green.
+Surprises/deviations: APPROVED TEST-DEFECT FIX — the fixture needle
+"house(at:" resolved by first occurrence to the DEFINITION HEADER (line 4),
+where no `call` node can exist for any correct parser: the lookup was
+unsatisfiable (same first-occurrence needle-collision class as P1-T4's
+link-test finding). Implementation was verified against every assertion
+via a scratch harness under the intended line-14 call site BEFORE asking;
+review approved changing the needle to "house(at: (20" (both uses, nothing
+else). Sibling sweep of every pathAt+indexOf+kind lookup across the test
+files: no other unsatisfiable needles. One dormant hazard noted:
+lines.test.ts's repeatNode uses indexOf("repeat"), which would hit
+house-row's line-1 COMMENT if that fixture were ever pointed at house-row
+(it currently only sees comment-free synthetic sources — no action).
