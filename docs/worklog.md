@@ -286,3 +286,41 @@ files: no other unsatisfiable needles. One dormant hazard noted:
 lines.test.ts's repeatNode uses indexOf("repeat"), which would hit
 house-row's line-1 COMMENT if that fixture were ever pointed at house-row
 (it currently only sees comment-free synthetic sources — no action).
+
+## P3-T6 — studio Phase 3 wiring — 2026-07-09
+Done: state panel (rows/glyphs/sparklines/write-flash + pointer row via
+inputsAt), typed cells (figures / exact thumbnails / table-to-plot at the
+28px threshold), the three hover semantics, diff toggle outlines,
+"via house(…)" chips, and editor expression-value hover (chalkHover gains
+an optional ValuesSource; the studio resolves a hover position to the
+enclosing argument's value expression). Tests: unchanged at 164.
+Surprises/deviations: verified live — post-state varsAtStep swap shows a
+written var updated while a not-yet-written one holds its entering value;
+scale-spiral's radius hover lists all twelve values.
+
+## P3-T7 — demonstrations + golden identity — 2026-07-09
+Done: Gate N's four state-demos went green at P3-T3 (they consume
+valuesForNode + the P3-T2 model). Ruling follow-through: goldens
+regenerated with npm run test:update — ALL FOUR files byte-identical
+(sha1 equal before/after; git status clean), scale-spiral included. The
+approved T8 deviation closes as specified: P3-T7 was a byte-identity
+re-check, and the engine never drifted.
+
+## P3-T8 / Gates M–O — 2026-07-09
+Gate M ✓ npm test fully green: 164 passed / 0 failed across every Phase
+0–3 file (15 skipped = PERF-gated dummies). Goldens byte-identical.
+Gate N ✓ state-demos 4/4 (all twelve radii in order; strictly increasing
+with correct summary; constant first differences with monotone sparkline;
+exact thumbnails on every shape cell).
+Gate O ✓ PERF=1 numbers (medians):
+  writeEvents+stateRows @5k writes: 1.87 ms (budget 10 — 5.3x headroom)
+  valuesForNode @50k:               1.02 ms (budget 5 — 4.9x headroom)
+  varSeries 64-frame window:        0.50 ms (budget 80 — 160x headroom;
+                                    the watched budget; no statesRange
+                                    escalation needed)
+  diffDisplay @500 ops:             0.27 ms (budget 2 — 7.4x headroom)
+Full bench sweep, all phases, one run — no regressions:
+  parse+fast @50k 2.90 (100); instrumented @50k 3.96 (30); fast @5k 0.21
+  (5); editor loop 0.09–0.20 examples / 4.99 synthetic-500 (50/100);
+  match 5.54 (10); scrubView 0.014 (2); iterationGrid 0.76 (15).
+Gate P: pending human — script presented, awaiting result.
