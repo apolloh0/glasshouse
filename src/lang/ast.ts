@@ -55,12 +55,20 @@ export interface ForRange  extends BaseNode { kind: "for";    name: string; from
 export interface If        extends BaseNode { kind: "if";     cond: Expr; then: Stmt[]; else_: Stmt[] | null }
 export interface Return    extends BaseNode { kind: "return"; value: Expr | null }
 
-export type Stmt = StateDecl | Assign | ExprStmt | Repeat | ForRange | If | Return;
+/** Phase 4a (D36): `group(move: ..., rotate: ..., scale: ..., around: ...):` —
+ *  a lexical transform scope. Labeled args reuse LabeledArg; allowed labels
+ *  and semantics are pinned in tests/group.test.ts and docs/phase4a-spec.md. */
+export interface GroupBlock extends BaseNode { kind: "group"; args: LabeledArg[]; body: Stmt[] }
+
+export type Stmt = StateDecl | Assign | ExprStmt | Repeat | ForRange | If | Return | GroupBlock;
 
 // ---------- Top level ----------
 
-/** `to name(label1: p1, label2: p2): ... end` — parameter names ARE the call labels. */
-export interface Definition extends BaseNode { kind: "to"; name: string; params: { name: string; span: Span }[]; body: Stmt[] }
+/** `to name(label1: p1, label2: p2): ... end` — parameter names ARE the call
+ *  labels. D37 (closes D30): `bind` is the internal binding name (`base` in
+ *  `at: base`); `span` continues to point at the binding-name token for
+ *  back-compat with D30-era code. The parser populates both. */
+export interface Definition extends BaseNode { kind: "to"; name: string; params: { name: string; span: Span; bind?: string }[]; body: Stmt[] }
 
 export type EventSpec =
   | { kind: "pointer"; which: "pressed" | "released" | "moved" }

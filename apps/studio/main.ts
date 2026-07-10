@@ -833,3 +833,33 @@ rebuild(houseRow);
 //
 // 16. As before: NO step/window/threshold logic in this file — if a number
 //     or an if lives here, it belongs in src/flow or src/ui with a test.
+
+// ---------------------------------------------------------------------------
+// P4a-T7 — Phase 4a wiring plan (after gates Q-prerequisites; see spec §6):
+//
+// 17. Completions: a CM autocomplete source from completionsAt(lastGood,
+//     doc, pos); render each option with a 64x48 preview canvas painted
+//     from previewFor(docWithCandidate, seed) — throttle to the highlighted
+//     option (arrowing swaps previews; never run all candidates at once).
+//
+// 18. Palette pane (right column, collapsible): paletteEntries thumbnails
+//     via previewFor + thumbnailFit at 48x36; click inserts at the cursor's
+//     statement boundary; drag onto the stage inserts with `center:`/`at:`
+//     rewritten to the drop point via the SAME splice rules as drag.ts.
+//
+// 19. Number drags: cursor affordance (ew-resize) over NumberLits; pointer
+//     capture on mousedown; dx * step per 2px; apply() -> editor dispatch
+//     (one undo group per gesture) -> debounced rerun. Color/angle literals
+//     open widgetAt-backed inline pickers.
+//
+// 20. Point handles: pointHandles(lastGood, doc) drawn as ring handles on
+//     the overlay; dragging calls applyBoth with the pointer's stage
+//     coords; same undo-group rule.
+//
+// 21. Axes overlay: while the scrubber sits inside a group (activeGroupsAt
+//     non-empty), draw axesGlyph for each active group's matrix, innermost
+//     brightest; label with the group's arg summary ("rotate 96° around
+//     (160, 120)").
+//
+// 22. As ever: no math in this file. Steps, snapping, matrix work, splice
+//     rules — all live in src/ui and src/flow with tests.

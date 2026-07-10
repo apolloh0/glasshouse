@@ -221,3 +221,55 @@ paper -> -1; post-state callStackAt exact).
 `"house(at: (20"` in both uses of tests/stack.test.ts, nothing else.
 Applied under explicit review sign-off — the never-modify-tests rule
 stands; this records its one sanctioned exception.*
+
+**D35 — Phase 4 splits into 4a and 4b.** 4a (this scaffold): the group
+language extension, completions + previews, palette, literal-level drags —
+everything creation-shaped that needs no provenance. 4b (provenance,
+inversion, drag disambiguation) is designed only after 4a lands, against
+the evaluator as-built and its measured instrumented headroom. Rationale:
+4b is the project's research-grade core; quarantine the risk, and spec
+against reality, not stubs.
+
+**D36 — `group` semantics (Chalk v1.1).** Syntax: `group(move:, rotate:,
+scale:, around:):` + indented body, ≥1 arg, only those labels; statement
+position anywhere. rotate takes angle or number-of-degrees; scale uniform
+and positive. Matrix: T(move)·T(around)·R(deg)·S(s)·T(-around), nesting
+parent·child, positive rotation clockwise on screen (y-down/canvas).
+Transforms apply EAGERLY at emit — ops carry world coordinates; display
+list format, serializer, renderer, diff, bounds untouched; radii and
+stroke widths scale. Nonzero rotation lowers rect to two exact triangles
+(ABC+ACD, one step index) and makes ellipse a friendly diagnostic. D31
+extension: group = one statement completion row after its body; args are
+expr rows re-evaluated per execution; container for executedInFrames, row
+for executedStatements/iterationGrid. No new trace surface — the viz
+derives matrices from traced arg values. Eager application also makes the
+transform part of each coordinate's affine chain, which is exactly what
+4b's inversion needs.
+
+**D37 — `bind` promoted to a field (closes D30).** `Definition.params`
+gains `bind?: string`; the parser populates it; `span` keeps pointing at
+the binding token for D30-era readers. Hover reads `bind`.
+
+**D38 — Completion and preview rules.** Candidates: draw builtins + paper
+(full default-arg calls; stdlib dflt else FALLBACK_DEFAULTS by type, both
+rendered via showValue — the vocabulary is its own syntax), user
+definitions (args `0`; previews may error and are listed anyway),
+CONSTRUCT_TEMPLATES. previewFor = parse + setup + ≤1 NO_INPUT frame,
+session-isolated, ChalkErrors as data, deterministic.
+
+**D39 — Literal drags.** Step from textual form: decimal → 0.1, integer
+→ 1; splices round to step, format without trailing zeros, and must
+preserve program identity (IdTracker: 0 fresh / 0 dropped — tested).
+Point handles only where both coordinates are literals; computed
+coordinates are 4b.
+
+**D40 — apps/debug deleted; D22 reaffirmed for 4a.** The studio superseded
+the T11 pane phases ago. No browser automation in 4a either — every model
+is pure and the drag FEEL is human-tested (Gate T/U); revisit at 4b, where
+inversion quality may want scripted pointer runs.
+
+**Gate P — recorded PASS (2026-07-10).** Three participants each answered
+the three scaleFactor questions on scale-spiral.chalk in under thirty
+seconds, by looking (row hover + state panel; phase3-spec §4/§6). Phase 3
+closed. Phases 0–3 complete: all automated gates green, all human gates
+recorded PASS.

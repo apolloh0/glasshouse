@@ -365,9 +365,10 @@ function evalCall(ctx: EvalContext, call: CallExpr): Value | null {
     finishStep(ctx, call.id, STEP_KIND.callEnter, null, ctx.ops.length);
     const scope = new Map<string, Value>();
     for (let i = 0; i < def.params.length; i++) {
-      // D30: the param's span points at its binding name in the source.
+      // D37: `bind` carries the binding name; the span slice remains the
+      // D30-era fallback.
       const p = def.params[i]!;
-      scope.set(ctx.program.source.slice(p.span.start, p.span.end), values[i]!);
+      scope.set(p.bind ?? ctx.program.source.slice(p.span.start, p.span.end), values[i]!);
     }
     ctx.locals.push(scope);
     let result: Value | null = null;

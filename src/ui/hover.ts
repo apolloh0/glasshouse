@@ -218,12 +218,13 @@ function nameCard(program: Program, inner: AnyNode[], ref: NameRef): HoverResult
       };
     }
   }
-  // definition parameter? (D30: the param span points at its binding name)
+  // definition parameter? (D37: `bind` is the field; span slicing is the
+  // D30-era fallback for programs parsed before the promotion)
   for (const node of inner) {
     if (node.kind !== "to") continue;
     const def = node as Definition;
     for (const p of def.params) {
-      const binding = program.source.slice(p.span.start, p.span.end);
+      const binding = p.bind ?? program.source.slice(p.span.start, p.span.end);
       if (binding === ref.name) {
         return {
           card: {

@@ -13,6 +13,7 @@ export const KEYWORDS = [
   "state", "to", "end", "every", "frame", "when", "pointer", "key",
   "pressed", "released", "moved", "repeat", "as", "for", "from", "to",
   "step", "if", "else", "return", "and", "or", "not", "true", "false",
+  "group",
 ] as const;
 
 export interface Token {

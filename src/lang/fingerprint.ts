@@ -31,6 +31,7 @@ function salient(node: AnyNode): string {
     case "repeat": return node.counter ?? "";
     case "for":    return node.name + (node.step ? "/step" : "");
     case "if":     return node.else_ ? "/else" : "";
+    case "group":  return "group(" + node.args.map((a) => a.label).join(",") + ")";
     case "return": return node.value ? "/value" : "";
     case "to":     return node.name + "(" + node.params.map((p) => p.name).join(",") + ")";
     case "frame":  return "";

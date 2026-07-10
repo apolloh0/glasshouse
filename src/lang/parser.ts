@@ -133,7 +133,7 @@ class Parser {
         this.peek().span);
     }
     this.expectOp("(", "after `to " + nameTok.text + "`");
-    const params: { name: string; span: Span }[] = [];
+    const params: { name: string; span: Span; bind?: string }[] = [];
     if (!this.atOp(")")) {
       for (;;) {
         const labelTok = this.at("name") || this.at("keyword") ? this.next() : null;
@@ -147,7 +147,9 @@ class Parser {
           throw this.errAt("`" + labelTok.text + ":` needs a name to call this input inside the block — like `" + labelTok.text + ": p`.",
             this.peek().span);
         }
-        params.push({ name: labelTok.text, span: bindTok.span });
+        // D37: bind is the internal name; span keeps pointing at its token
+        // for D30-era readers.
+        params.push({ name: labelTok.text, span: bindTok.span, bind: bindTok.text });
         if (this.eat("op", ",")) continue;
         break;
       }

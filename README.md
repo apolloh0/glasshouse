@@ -1,4 +1,4 @@
-# Glasshouse — Phases 0–3
+# Glasshouse — Phases 0–4a
 
 The deterministic execution engine for **Glasshouse**, a learnable programming
 system in the spirit of Bret Victor's *Learnable Programming*, and **Chalk**,
@@ -33,6 +33,13 @@ with sparklines, aggregates turn tables into plots instead of truncating,
 and a diff view says what changed between frames. Spec:
 `docs/phase3-spec.md`.
 
+**Phase 4a starts creation**: the `group` transform extension (Chalk v1.1),
+statement completions that preview live before you commit, a parts palette
+of exact thumbnails, and every literal as a control — draggable numbers,
+color and angle widgets, on-stage point handles. Provenance-driven direct
+manipulation is Phase 4b, designed after 4a lands. Spec:
+`docs/phase4a-spec.md`.
+
 ## Quickstart
 
     npm install
@@ -48,6 +55,7 @@ and a diff view says what changed between frames. Spec:
     docs/phase1-spec.md   Phase 1 spec: tasks P1-T1..P1-T9, gates D-G
     docs/phase2-spec.md   Phase 2 spec: tasks P2-T1..P2-T8, gates H-L
     docs/phase3-spec.md   Phase 3 spec: tasks P3-T1..P3-T8, gates M-P
+    docs/phase4a-spec.md  Phase 4a spec: tasks P4a-T1..P4a-T9, gates Q-U
     docs/decisions.md     ADR-lite log of decisions already made
     CLAUDE.md             working agreement for Claude Code
     src/lang              lexer, parser, AST (Chalk)
@@ -58,7 +66,7 @@ and a diff view says what changed between frames. Spec:
     src/ui                hover/link/annotate/diagnose — pure, DOM-free
     src/editor            Lezer grammar (+ gen/) and CodeMirror glue
     src/flow              scrubber / timeline / ghost models — pure, DOM-free
-    apps/studio           the Phase 1 shell
+    apps/studio           the studio (apps/debug retired, D40)
     examples/             Chalk programs used by golden + determinism tests
     tests/                the executable definition of done
     bench/                performance budget gates

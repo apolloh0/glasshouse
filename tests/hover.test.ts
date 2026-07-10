@@ -10,7 +10,7 @@ import { pathAt, visit } from "../src/lang/walk.js";
 import type { Program } from "../src/lang/ast.js";
 
 const ex = (name: string): string => readFileSync("examples/" + name, "utf8");
-const EXAMPLES = ["bouncing-ball.chalk", "house-row.chalk", "pointer-paint.chalk", "scale-spiral.chalk"];
+const EXAMPLES = ["bouncing-ball.chalk", "house-row.chalk", "pointer-paint.chalk", "scale-spiral.chalk", "pinwheel.chalk"];
 
 function at(source: string, needle: string, delta = 1): number {
   const i = source.indexOf(needle);

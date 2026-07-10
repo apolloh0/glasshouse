@@ -1,4 +1,4 @@
-# CLAUDE.md — Glasshouse (Phases 0–3)
+# CLAUDE.md — Glasshouse (Phases 0–4a)
 
 Phase 0: deterministic, replayable, instrumented interpreter for the Chalk
 language (`docs/phase0-spec.md`, tasks T1..T11, gates A–C).
@@ -12,6 +12,11 @@ Phase 3: see the state — typed timeline cells, expression value hover, the
 always-on state panel with sparklines, aggregates + table-to-plot, frame
 diff, call attribution (`docs/phase3-spec.md`, tasks P3-T1..P3-T8, gates
 M–P). The language surface is FROZEN through Phase 3 (D23).
+Phase 4a: create by reacting — the `group` transform extension (Chalk
+v1.1, D36), statement completions with live previews, the parts palette,
+draggable literals and point handles (`docs/phase4a-spec.md`, tasks
+P4a-T1..P4a-T9, gates Q–U). Phase 4b (provenance + inversion) is NOT
+designed yet — do not implement anything from phase4a-spec §8.
 **Phases are strictly ordered**: finish each phase's gates before starting
 the next; work each phase's tasks in order.
 
@@ -94,6 +99,8 @@ the no-DOM rule for the rest of `src/`). The Lezer tree is presentation only
 - Phase 3 (`bench/perf-state.test.ts`): writeEvents+stateRows <= 10 ms @ ~5k
   writes; valuesForNode <= 5 ms @ ~50k steps; varSeries <= 80 ms @ 64-frame
   window; diffDisplay <= 2 ms @ 500 ops
+- Phase 4a (`bench/perf-create.test.ts`): previewFor <= 20 ms per example;
+  completionsAt <= 2 ms @ synthetic-500; drag loop <= 10 ms
 
 If the tree-walker misses budget: profile first, micro-optimize the hot loop
 (node-kind switch, no allocation per step, reused Value scratch), and only
@@ -135,5 +142,10 @@ Do not reach for the compiler before the walker is proven too slow.
 - Values shown anywhere go through `showValue`/`valueGlyph` (Phase 3). Two
   panes printing one value differently is a bug in src/ui/format.ts, not a
   styling choice. Thumbnails come from thumbnailFit over REAL ops (D27).
+- Group transforms apply EAGERLY at emit (D36): ops carry world
+  coordinates; the display-list format never changes; the four
+  pre-existing goldens never move. previewFor is session-isolated (D38);
+  literal splices preserve program identity (D39) — both are tested pins,
+  not aspirations.
 - When something in the spec is ambiguous, pick the simplest interpretation,
   implement it, and record the choice in `docs/decisions.md` — do not stall.

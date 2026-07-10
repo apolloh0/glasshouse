@@ -57,6 +57,7 @@ export function children(node: AnyNode): AnyNode[] {
         ? [node.cond, ...node.then, ...node.else_]
         : [node.cond, ...node.then];
     case "return": return node.value ? [node.value] : [];
+    case "group":  return [...node.args.map((a) => a.value), ...node.body];
     // ----- top level -----
     case "to":     return [...node.body];
     case "frame":  return [...node.body];

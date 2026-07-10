@@ -1,0 +1,11 @@
+// Phase 4a fixture: transforms as visible objects (D36). Four blades spin
+// about the stage center; the transform-frame viz shows each group's axes.
+paper(color: #FFFFFF)
+state spin = 0
+
+every frame:
+  spin = spin + 3
+  repeat 4 as i:
+    group(rotate: spin + i * 90, around: (160, 120)):
+      triangle(a: (160, 120), b: (240, 108), c: (240, 132), fill: #C4483D)
+      circle(center: (250, 120), radius: 6, fill: #E0A83C)

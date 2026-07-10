@@ -8,7 +8,7 @@ import { parser } from "../src/editor/gen/chalk-parser.js";
 import { lex } from "../src/lang/lexer.js";
 
 const ex = (name: string): string => readFileSync("examples/" + name, "utf8");
-const EXAMPLES = ["bouncing-ball.chalk", "house-row.chalk", "pointer-paint.chalk", "scale-spiral.chalk"];
+const EXAMPLES = ["bouncing-ball.chalk", "house-row.chalk", "pointer-paint.chalk", "scale-spiral.chalk", "pinwheel.chalk"];
 
 function collectNodes(source: string): SyntaxNode[] {
   const out: SyntaxNode[] = [];
@@ -67,5 +67,12 @@ describe("lezer grammar (P1-T2)", () => {
     const stateAt = source.indexOf("state y");
     const hit = leaves.find((n) => n.from === stateAt && n.name === "Keyword");
     expect(hit, "`state` should lex as a Keyword node").toBeTruthy();
+
+    // Phase 4a: `group` joined KEYWORDS (D36) — the grammar must agree.
+    const pin = ex("pinwheel.chalk");
+    const pinLeaves = collectNodes(pin).filter((n) => !n.firstChild);
+    const groupAt = pin.indexOf("group(");
+    const ghit = pinLeaves.find((n) => n.from === groupAt && n.name === "Keyword");
+    expect(ghit, "`group` should lex as a Keyword node").toBeTruthy();
   });
 });

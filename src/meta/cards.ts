@@ -39,6 +39,13 @@ export const TYPE_KEYS = [
 
 /** The full set of keys the registry must cover. Derived, not hand-listed:
  *  adding a builtin or a parameter automatically demands a card. */
+/** Phase 4a (D36): `group` is a construct (auto-included via KEYWORDS), but
+ *  its four labeled parameters aren't in BUILTINS — require their cards
+ *  explicitly so hover coverage stays total. */
+export const GROUP_PARAM_KEYS = [
+  "param:group.move", "param:group.rotate", "param:group.scale", "param:group.around",
+] as const;
+
 export function requiredCardKeys(): string[] {
   const keys: string[] = [];
   for (const [name, spec] of BUILTINS) {
@@ -47,6 +54,7 @@ export function requiredCardKeys(): string[] {
   }
   for (const c of CONSTRUCT_KEYS) keys.push(`construct:${c}`);
   for (const t of TYPE_KEYS) keys.push(`type:${t}`);
+  keys.push(...GROUP_PARAM_KEYS);
   return keys;
 }
 
