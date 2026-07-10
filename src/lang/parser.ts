@@ -27,6 +27,8 @@ import { assignNodeIds } from "./nodeIds.js";
  *    hover can recover it from source (decision D30).
  */
 
+const GROUP_LABELS = ["move", "rotate", "scale", "around"];
+
 type Ctx = "top" | "setup-block" | "frame" | "def";
 // "top": directly at top level. "setup-block": inside repeat/for/if nested at
 // top level (still setup — no assignment). "frame": inside every frame:/when
@@ -247,6 +249,7 @@ class Parser {
         case "for": return this.parseFor(ctx);
         case "if": return this.parseIf(ctx);
         case "return": return this.parseReturn(ctx);
+        case "group": return this.parseGroup(ctx);
         case "else":
           throw this.errAt("`else` needs an `if` right above it, at the same indentation.", t.span);
         case "to":
@@ -355,6 +358,50 @@ class Parser {
 
   /** Nested bodies keep their owner's rules; top-level loops/ifs stay setup. */
   private bodyCtx(ctx: Ctx): Ctx { return ctx === "top" ? "setup-block" : ctx; }
+
+  /** Phase 4a (D36): `group(move: ..., rotate: ..., scale: ..., around: ...):`
+   *  — a lexical transform scope; >= 1 arg, only those four labels. */
+  private parseGroup(ctx: Ctx): Stmt {
+    const groupTok = this.next(); // `group`
+    const lparen = this.expectOp("(", "after `group`");
+    const args: LabeledArg[] = [];
+    if (!this.atOp(")")) {
+      for (;;) {
+        if (this.at("eof")) throw this.errAt("This `(` is missing its closing `)`.", lparen.span);
+        const labelTok = (this.at("name") || this.at("keyword")) && this.peek(1).kind === "op" && this.peek(1).text === ":"
+          ? this.next()
+          : null;
+        if (!labelTok) {
+          throw this.errAt("`group` needs labels on its values — try `group(move: (10, 0)):`.",
+            this.peek().span);
+        }
+        if (!GROUP_LABELS.includes(labelTok.text)) {
+          throw this.errAt("`group` doesn't take `" + labelTok.text + ":` — its values are " +
+            GROUP_LABELS.map((l) => "`" + l + ":`").join(", ") + ".", labelTok.span);
+        }
+        if (args.some((a) => a.label === labelTok.text)) {
+          throw this.errAt("`group` got `" + labelTok.text + ":` twice — give it just once.", labelTok.span);
+        }
+        this.next(); // `:`
+        const value = this.parseExpr();
+        args.push({ label: labelTok.text, labelSpan: labelTok.span, value });
+        if (this.eat("op", ",")) continue;
+        break;
+      }
+    }
+    const rparen = this.eat("op", ")");
+    if (!rparen) throw this.errAt("This `(` is missing its closing `)`.", lparen.span);
+    if (args.length === 0) {
+      throw this.errAt("`group` needs at least one value — try `group(move: (10, 0)):` or `group(rotate: 45°):`.",
+        this.span(groupTok.span, rparen.span));
+    }
+    this.expectOp(":", "after `group(...)`");
+    const body = this.parseIndentedBlock("`group(...):`", this.bodyCtx(ctx));
+    return {
+      kind: "group", id: -1, args, body,
+      span: this.span(groupTok.span, body[body.length - 1]!.span),
+    };
+  }
 
   /** A line starting with a name: assignment or a stand-alone call. */
   private parseNameStmt(ctx: Ctx): Stmt {

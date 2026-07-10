@@ -66,7 +66,7 @@ export function stepsForSpan(
   visit(program, (node) => {
     switch (node.kind) {
       case "state": case "assign": case "expr":
-      case "repeat": case "for": case "if": case "return":
+      case "repeat": case "for": case "if": case "return": case "group":
         if (node.span.start >= span.start && node.span.end <= span.end) {
           stmtIds.add(node.id);
         }

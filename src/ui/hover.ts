@@ -52,15 +52,16 @@ export function labelAt(program: Program, offset: number): HoverResult | null {
   const path = pathAt(program, offset);
   const inner = [...path].reverse(); // innermost first
 
-  // (1) argument LABEL under the cursor
+  // (1) argument LABEL under the cursor (calls AND group blocks — D36)
   for (const node of inner) {
-    if (node.kind !== "call") continue;
+    if (node.kind !== "call" && node.kind !== "group") continue;
+    const callee = node.kind === "call" ? node.callee : "group";
     for (const arg of node.args) {
       if (contains(arg.labelSpan, offset)) {
         return {
-          card: paramCard(node.callee, arg.label),
+          card: paramCard(callee, arg.label),
           span: arg.labelSpan,
-          context: arg.label + " of this " + node.callee,
+          context: arg.label + " of this " + callee,
         };
       }
     }
@@ -72,9 +73,9 @@ export function labelAt(program: Program, offset: number): HoverResult | null {
     const hit = nearestCallArg(inner, literal);
     if (hit) {
       return {
-        card: paramCard(hit.call.callee, hit.label),
+        card: paramCard(hit.callee, hit.label),
         span: literal.span,
-        context: hit.label + " of this " + hit.call.callee,
+        context: hit.label + " of this " + hit.callee,
         literal,
       };
     }
@@ -120,17 +121,17 @@ function contains(span: Span, offset: number): boolean {
   return span.start <= offset && offset < span.end;
 }
 
-/** The nearest enclosing call of `literal`, plus the label of the argument
- *  whose value subtree contains it. */
+/** The nearest enclosing call (or group block) of `literal`, plus the label
+ *  of the argument whose value subtree contains it. */
 function nearestCallArg(
   inner: AnyNode[],
   literal: Expr,
-): { call: CallExpr; label: string } | null {
+): { callee: string; label: string } | null {
   for (const node of inner) {
-    if (node.kind !== "call") continue;
+    if (node.kind !== "call" && node.kind !== "group") continue;
     for (const arg of node.args) {
       if (arg.value.span.start <= literal.span.start && literal.span.end <= arg.value.span.end) {
-        return { call: node, label: arg.label };
+        return { callee: node.kind === "call" ? node.callee : "group", label: arg.label };
       }
     }
   }

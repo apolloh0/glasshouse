@@ -45,7 +45,7 @@ export interface StmtRow {
   steps: number[];
 }
 
-const STMT_KINDS = new Set(["state", "assign", "expr", "repeat", "for", "if", "return"]);
+const STMT_KINDS = new Set(["state", "assign", "expr", "repeat", "for", "if", "return", "group"]);
 
 /** Every statement-completion step per node, in trace order. */
 function stmtCompletions(view: TraceView): Map<NodeId, number[]> {

@@ -58,6 +58,127 @@ class ReturnSignal {
   constructor(public value: Value | null) {}
 }
 
+// ---------- Phase 4a (D36): the group transform stack ----------
+//
+// Engine-private affine math. Conventions are pinned in src/flow/transform.ts
+// (the presentation side shares them); the transform-viz self-consistency
+// test holds the two implementations to the same answers. The engine keeps
+// its own copy because src/engine may not import src/flow (CLAUDE.md map).
+// Canvas-order matrix (a b c d e f): x' = a*x + c*y + e; y' = b*x + d*y + f;
+// positive rotation clockwise on screen (y-down).
+
+interface Xform {
+  a: number; b: number; c: number; d: number; e: number; f: number;
+  /** Product of the uniform `scale:` args — radii and widths multiply by
+   *  this exactly (no hypot round-trip). */
+  s: number;
+}
+
+const XFORM_IDENTITY: Xform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0, s: 1 };
+
+function xformMul(p: Xform, q: Xform): Xform {
+  return {
+    a: p.a * q.a + p.c * q.b,
+    b: p.b * q.a + p.d * q.b,
+    c: p.a * q.c + p.c * q.d,
+    d: p.b * q.c + p.d * q.d,
+    e: p.a * q.e + p.c * q.f + p.e,
+    f: p.b * q.e + p.d * q.f + p.f,
+    s: p.s * q.s,
+  };
+}
+
+/** T(move)·T(around)·R(deg)·S(s)·T(-around) — D36's pinned composition. */
+function xformFor(move: { x: number; y: number }, deg: number, scale: number,
+  around: { x: number; y: number }): Xform {
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  // R·S about the origin, then conjugate by `around`, then translate:
+  const a = cos * scale, b = sin * scale, c = -sin * scale, d = cos * scale;
+  return {
+    a, b, c, d,
+    e: move.x + around.x - (a * around.x + c * around.y),
+    f: move.y + around.y - (b * around.x + d * around.y),
+    s: scale,
+  };
+}
+
+const xformApply = (m: Xform, x: number, y: number): { x: number; y: number } =>
+  ({ x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f });
+
+/** Composed transform per evaluation context (stack discipline; the WeakMap
+ *  keeps EvalContext itself contract-clean). */
+const xformStacks = new WeakMap<EvalContext, Xform[]>();
+
+function currentXform(ctx: EvalContext): Xform | null {
+  const stack = xformStacks.get(ctx);
+  return stack !== undefined && stack.length > 0 ? stack[stack.length - 1]! : null;
+}
+
+const hasRotation = (m: Xform): boolean =>
+  Math.abs(m.b) > 1e-12 || Math.abs(m.c) > 1e-12;
+
+/** Eagerly rewrite ops [from, end) into world coordinates (D36): the display
+ *  list format never changes; rect lowers to two exact triangles under
+ *  rotation; ellipse under rotation is a friendly diagnostic. */
+function applyXformToOps(ctx: EvalContext, m: Xform, from: number, span: Span): void {
+  const out: DisplayOp[] = [];
+  for (let i = from; i < ctx.ops.length; i++) {
+    const op = ctx.ops[i]!;
+    switch (op.kind) {
+      case "circle": {
+        const p = xformApply(m, op.cx, op.cy);
+        out.push({ ...op, cx: p.x, cy: p.y, r: op.r * m.s });
+        break;
+      }
+      case "ellipse": {
+        if (hasRotation(m)) {
+          throw err("An ellipse can't tilt yet — use a circle here, or draw the ellipse outside the turning group.",
+            span);
+        }
+        const p = xformApply(m, op.cx, op.cy);
+        out.push({ ...op, cx: p.x, cy: p.y, rx: op.rx * m.s, ry: op.ry * m.s });
+        break;
+      }
+      case "rect": {
+        if (!hasRotation(m)) {
+          const p = xformApply(m, op.x, op.y);
+          out.push({ ...op, x: p.x, y: p.y, w: op.w * m.s, h: op.h * m.s });
+          break;
+        }
+        // corners A B C D -> triangles ABC + ACD, one step index (D36)
+        const A = xformApply(m, op.x, op.y);
+        const B = xformApply(m, op.x + op.w, op.y);
+        const C = xformApply(m, op.x + op.w, op.y + op.h);
+        const D = xformApply(m, op.x, op.y + op.h);
+        out.push(
+          { kind: "triangle", ax: A.x, ay: A.y, bx: B.x, by: B.y, cx: C.x, cy: C.y,
+            fill: op.fill, sourceNodeId: op.sourceNodeId, stepIndex: op.stepIndex },
+          { kind: "triangle", ax: A.x, ay: A.y, bx: C.x, by: C.y, cx: D.x, cy: D.y,
+            fill: op.fill, sourceNodeId: op.sourceNodeId, stepIndex: op.stepIndex },
+        );
+        break;
+      }
+      case "triangle": {
+        const A = xformApply(m, op.ax, op.ay);
+        const B = xformApply(m, op.bx, op.by);
+        const C = xformApply(m, op.cx, op.cy);
+        out.push({ ...op, ax: A.x, ay: A.y, bx: B.x, by: B.y, cx: C.x, cy: C.y });
+        break;
+      }
+      case "line": {
+        const p1 = xformApply(m, op.x1, op.y1);
+        const p2 = xformApply(m, op.x2, op.y2);
+        out.push({ ...op, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, width: op.width * m.s });
+        break;
+      }
+    }
+  }
+  ctx.ops.length = from;
+  ctx.ops.push(...out);
+}
+
 // ---------- T4: statements ----------
 
 /** T4 — evaluate a statement list (a block). */
@@ -159,6 +280,61 @@ function execStmt(ctx: EvalContext, s: Stmt): void {
       const v = s.value === null ? null : evalExpr(ctx, s.value);
       finishStep(ctx, s.id, STEP_KIND.stmt, v, op0);
       throw new ReturnSignal(v);
+    }
+    case "group": {
+      // D36/D31 extension: args complete as expr rows (re-evaluated every
+      // execution), the body runs inside the composed transform, and the
+      // group completes as ONE statement row after its body — like repeat.
+      let move = { x: 0, y: 0 };
+      let deg = 0;
+      let scale = 1;
+      let around = { x: 0, y: 0 };
+      for (const arg of s.args) {
+        const v = evalExpr(ctx, arg.value);
+        switch (arg.label) {
+          case "move":
+            if (v.t !== "point") {
+              throw err("`move:` needs a point like (10, 0) — right now it's " + typeName(v) + ".", arg.value.span);
+            }
+            move = { x: v.x, y: v.y };
+            break;
+          case "rotate":
+            if (v.t === "angle") deg = v.deg;
+            else if (v.t === "num") deg = v.v;
+            else {
+              throw err("`rotate:` needs an angle like 45° (or a number of degrees) — right now it's " + typeName(v) + ".", arg.value.span);
+            }
+            break;
+          case "scale":
+            if (v.t !== "num" || v.v <= 0) {
+              throw err("`scale:` needs a number bigger than 0 — right now it's " +
+                (v.t === "num" ? String(v.v) : typeName(v)) + ".", arg.value.span);
+            }
+            scale = v.v;
+            break;
+          case "around":
+            if (v.t !== "point") {
+              throw err("`around:` needs a point like (160, 120) — right now it's " + typeName(v) + ".", arg.value.span);
+            }
+            around = { x: v.x, y: v.y };
+            break;
+        }
+      }
+      const own = xformFor(move, deg, scale, around);
+      const parent = currentXform(ctx);
+      let stack = xformStacks.get(ctx);
+      if (!stack) {
+        stack = [];
+        xformStacks.set(ctx, stack);
+      }
+      stack.push(parent ? xformMul(parent, own) : own);
+      try {
+        execBlock(ctx, s.body);
+      } finally {
+        stack.pop();
+      }
+      finishStep(ctx, s.id, STEP_KIND.stmt, null, op0);
+      return;
     }
   }
 }
@@ -345,6 +521,10 @@ function evalCall(ctx: EvalContext, call: CallExpr): Value | null {
       result = { t: "num", v: nextInt(ctx.rng, from, to) };
     } else {
       builtin.emit!(checked, ctx.ops, { sourceNodeId: call.id, stepIndex: ctx.stepIndex });
+      // D36: transforms apply EAGERLY at emit — ops leave here in world
+      // coordinates; nothing downstream knows groups exist.
+      const m = currentXform(ctx);
+      if (m) applyXformToOps(ctx, m, op0, call.span);
     }
     finishStep(ctx, call.id, STEP_KIND.expr, result, op0);
     return result;

@@ -45,7 +45,7 @@ item {
     "state" | "to" | "end" | "every" | "frame" | "when" | "pointer" |
     "key" | "pressed" | "released" | "moved" | "repeat" | "as" | "for" |
     "from" | "step" | "if" | "else" | "return" | "and" | "or" | "not" |
-    "true" | "false"
+    "true" | "false" | "group"
   }
 
   BuiltinName {

@@ -198,6 +198,22 @@ export const CARDS: ReadonlyMap<string, LabelCard> = new Map<string, LabelCard>(
   card("construct:false", "false",
     "The no answer to a question."),
 
+  // ---------- group (Chalk v1.1, D36) ----------
+  card("construct:group", "group",
+    "Moves, turns, or resizes everything drawn inside it, together.",
+    "Give it any of `move:`, `rotate:`, `scale:`, `around:` — the lines inside draw as one piece.",
+    "group(rotate: 45°, around: (160, 120)):\n  circle(center: (200, 120), radius: 10)"),
+  card("param:group.move", "move",
+    "A point to slide everything by — (10, 0) nudges the group right."),
+  card("param:group.rotate", "rotate",
+    "How far to turn the group, clockwise — 45° or plain 45 both work."),
+  card("param:group.scale", "scale",
+    "How much to grow or shrink the group — 2 doubles it, 0.5 halves it.",
+    "Must be bigger than 0. Sizes and line thicknesses scale too."),
+  card("param:group.around", "around",
+    "The point the group turns and scales about — its anchor.",
+    "Defaults to (0, 0), the stage's top-left corner."),
+
   // ---------- value types ----------
   card("type:number", "number",
     "A plain number, like 40 or 2.5 — sizes, positions, speeds."),
