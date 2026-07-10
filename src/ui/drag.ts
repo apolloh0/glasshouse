@@ -26,8 +26,9 @@
 //  applyBoth (same rounding rule as numberDragAt, per component). Points
 //  with computed components have no handle in 4a (that is 4b's job).
 
-import type { NodeId, Program, Span } from "../lang/ast.js";
-import { TODO } from "../util/todo.js";
+import type { NodeId, NumberLit, PointLit, Program, Span } from "../lang/ast.js";
+import { pathAt, visit, type AnyNode } from "../lang/walk.js";
+import { children } from "../lang/walk.js";
 
 export interface NumberDrag {
   span: Span;
@@ -36,13 +37,35 @@ export interface NumberDrag {
   apply: (v: number) => string;
 }
 
+/** Step from the literal's TEXTUAL form (D39). */
+function stepOf(source: string, span: Span): 1 | 0.1 {
+  return source.slice(span.start, span.end).includes(".") ? 0.1 : 1;
+}
+
+/** Round to the step and format without trailing zeros beyond it. */
+function fmtStep(v: number, step: 1 | 0.1): string {
+  const rounded = step === 1 ? Math.round(v) : Math.round(v * 10) / 10;
+  return String(rounded);
+}
+
+const splice = (source: string, span: Span, text: string): string =>
+  source.slice(0, span.start) + text + source.slice(span.end);
+
 export function numberDragAt(
   program: Program,
   source: string,
   offset: number,
 ): NumberDrag | null {
-  void program; void source; void offset;
-  TODO("P4a-T6", "textual-form step + identity-preserving splice");
+  const lit = [...pathAt(program, offset)].reverse()
+    .find((n) => n.kind === "number") as NumberLit | undefined;
+  if (!lit) return null;
+  const step = stepOf(source, lit.span);
+  return {
+    span: lit.span,
+    value: lit.value,
+    step,
+    apply: (v) => splice(source, lit.span, fmtStep(v, step)),
+  };
 }
 
 export type Widget =
@@ -54,8 +77,28 @@ export function widgetAt(
   source: string,
   offset: number,
 ): Widget | null {
-  void program; void source; void offset;
-  TODO("P4a-T6");
+  const path = [...pathAt(program, offset)].reverse();
+  for (const node of path) {
+    if (node.kind === "color") {
+      return {
+        kind: "color",
+        span: node.span,
+        rgb: node.rgb,
+        apply: (rgb) => splice(source, node.span,
+          "#" + (rgb >>> 0).toString(16).padStart(6, "0").toUpperCase()),
+      };
+    }
+    if (node.kind === "angle") {
+      const suffix = source.slice(node.span.start, node.span.end).endsWith("°") ? "°" : "deg";
+      return {
+        kind: "angle",
+        span: node.span,
+        deg: node.degrees,
+        apply: (deg) => splice(source, node.span, String(deg) + suffix),
+      };
+    }
+  }
+  return null;
 }
 
 export interface PointHandle {
@@ -69,6 +112,47 @@ export interface PointHandle {
 }
 
 export function pointHandles(program: Program, source: string): PointHandle[] {
-  void program; void source;
-  TODO("P4a-T6", "literal-only points inside call args, pre-order");
+  const handles: PointHandle[] = [];
+  const seen = new Set<NodeId>();
+
+  const collectFrom = (root: AnyNode): void => {
+    const stack: AnyNode[] = [root];
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (node.kind === "point" && node.x.kind === "number" && node.y.kind === "number" &&
+          !seen.has(node.id)) {
+        seen.add(node.id);
+        handles.push(makeHandle(node, source));
+      }
+      stack.push(...children(node));
+    }
+  };
+
+  // Points anywhere inside a call or group ARGUMENT, in pre-order (visit
+  // yields calls/groups pre-order; a seen-set guards nested-arg overlap).
+  visit(program, (node) => {
+    if (node.kind !== "call" && node.kind !== "group") return;
+    for (const arg of node.args) collectFrom(arg.value);
+  });
+  handles.sort((a, b) => a.nodeId - b.nodeId); // pre-order overall
+  return handles;
+}
+
+function makeHandle(point: PointLit, source: string): PointHandle {
+  const xLit = point.x as NumberLit;
+  const yLit = point.y as NumberLit;
+  const xStep = stepOf(source, xLit.span);
+  const yStep = stepOf(source, yLit.span);
+  return {
+    nodeId: point.id,
+    x: xLit.value,
+    y: yLit.value,
+    xSpan: xLit.span,
+    ySpan: yLit.span,
+    applyBoth: (x, y) => {
+      // splice the LATER span first so the earlier offsets stay valid
+      const first = splice(source, yLit.span, fmtStep(y, yStep));
+      return splice(first, xLit.span, fmtStep(x, xStep));
+    },
+  };
 }
