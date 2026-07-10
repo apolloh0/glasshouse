@@ -324,3 +324,69 @@ Full bench sweep, all phases, one run — no regressions:
   (5); editor loop 0.09–0.20 examples / 4.99 synthetic-500 (50/100);
   match 5.54 (10); scrubView 0.014 (2); iterationGrid 0.76 (15).
 Gate P: pending human — script presented, awaiting result.
+
+## P4a-T1 — bind field — 2026-07-10
+Done: parser populates params[].bind (D37); hover + evaluator read bind
+with the D30 span-slice fallback; tests/bind.test.ts added.
+Tests: 162→163 green.
+
+## P4a-T2 — group blocks — 2026-07-10
+Done: the Chalk v1.1 extension end to end (parser, evaluator transform
+stack + eager emit + rect lowering + diagnostics, D31 rows, 5 cards,
+hover, Lezer keyword + gen/). Tests: 163→183 green.
+Surprises/deviations: the engine keeps a PRIVATE affine implementation
+(CLAUDE.md forbids engine->flow imports); the transform-viz
+self-consistency test pins the two copies together. EvalContext stays
+contract-clean via a WeakMap transform stack.
+
+## P4a-T3 — transform viz — 2026-07-10
+Done: matrixFor (with -0 normalization), activeGroupsAt (lexical
+containment + open call sites, latest-arg decode), axesGlyph.
+Tests: 183→192 green.
+
+## P4a-T4 — completions + previews — 2026-07-10
+Done: completionsAt + previewFor (session-isolated; ChalkErrors as data);
+defaultStatementFor exported as the one source of default text.
+Tests: 192→202 green. The isolation pin holds.
+
+## P4a-T5 — palette — 2026-07-10
+Done: paletteEntries. Tests: 202→203 green.
+Surprises/deviations: a zeroed def call (house(at: 0, ...)) errors on
+base.x, but Gate R requires every palette preview ok — the header pins
+previews as "a program whose display IS the thumbnail", so the PREVIEW
+call (only) infers point-vs-number per param from member access on the
+binding and fills FALLBACK_DEFAULTS; inserts stay zeroed per D38.
+
+## P4a-T6 — draggable literals — 2026-07-10
+Done: numberDragAt, widgetAt, pointHandles per D39. Tests: 203→214 green
+(Gate R's drag half landed here — create-demos 2/2 before the studio).
+
+## P4a-T7 — studio wiring — 2026-07-10
+Done: plan 17-22 (autocomplete + live preview swap via CM's lazy info
+callback; palette pane with drag-drop point rewriting through
+pointHandles on the lone statement; number/angle gestures with one undo
+step per drag; native color picker; overlay point handles with drag
+priority; anchored axes overlay). Tests: unchanged at 214.
+Surprises/deviations: (1) @codemirror/autocomplete added (D41). (2) The
+manual script pins the axes at the PIVOT (160,120); axesGlyph maps the
+local origin, so anchorOf (the matrix's fixed point) was added to
+flow/transform and the studio shifts the glyph — placement only, solve
+in flow. Verified live end to end; console clean.
+
+## P4a-T8+T9 / Gates Q–S — 2026-07-10
+Gate Q ✓ suite 215/215 green; the four pre-existing goldens byte-identical
+(sha-checked before/after regeneration); pinwheel's golden generated and
+eyeballed numerically — four blades pivot exactly at (160,120), 90°
+apart, advancing 3° clockwise per frame. It pinwheels.
+Gate R ✓ create-demos 2/2 (blank -> completion -> preview -> commit ->
+drag -> bigger circle with 0 fresh / 0 dropped; palette exact and fully
+thumbnail-able).
+Gate S ✓ PERF=1 (medians): previewFor 0.02–0.11 ms per example (budget
+20); completionsAt synthetic-500 0.026 ms (budget 2); drag loop 0.04 ms
+(budget 10). Full five-file sweep green, no regressions anywhere:
+parse+fast 2.32 (100); instrumented 3.81 (30); fast 0.20 (5); editor
+loop 0.08–0.26 / 4.93 (50/100); match 6.01 (10); scrubView 0.017 (2);
+iterationGrid 0.74 (15); writeEvents+stateRows 1.90 (10); valuesForNode
+1.04 (5); varSeries 0.54 (80); diffDisplay 0.27 (2).
+Gates T and U: pending human — scripts presented, awaiting results.
+4b designer note: instrumented headroom now 3.81 of 30 ms (spec §8 asked).
