@@ -1,4 +1,4 @@
-# CLAUDE.md — Glasshouse (Phases 0–4a)
+# CLAUDE.md — Glasshouse (Phases 0–4b)
 
 Phase 0: deterministic, replayable, instrumented interpreter for the Chalk
 language (`docs/phase0-spec.md`, tasks T1..T11, gates A–C).
@@ -15,8 +15,10 @@ M–P). The language surface is FROZEN through Phase 3 (D23).
 Phase 4a: create by reacting — the `group` transform extension (Chalk
 v1.1, D36), statement completions with live previews, the parts palette,
 draggable literals and point handles (`docs/phase4a-spec.md`, tasks
-P4a-T1..P4a-T9, gates Q–U). Phase 4b (provenance + inversion) is NOT
-designed yet — do not implement anything from phase4a-spec §8.
+P4a-T1..P4a-T9, gates Q–U).
+Phase 4b: direct manipulation — post-hoc affine provenance, drag
+inversion with honest disambiguation, trig determinism
+(`docs/phase4b-spec.md`, tasks P4b-T0..P4b-T6, gates V–Z).
 **Phases are strictly ordered**: finish each phase's gates before starting
 the next; work each phase's tasks in order.
 
@@ -101,6 +103,8 @@ the no-DOM rule for the rest of `src/`). The Lezer tree is presentation only
   window; diffDisplay <= 2 ms @ 500 ops
 - Phase 4a (`bench/perf-create.test.ts`): previewFor <= 20 ms per example;
   completionsAt <= 2 ms @ synthetic-500; drag loop <= 10 ms
+- Phase 4b (`bench/perf-invert.test.ts`): dragCandidates <= 3 ms
+  (house-row) / <= 5 ms (@50k); full drag tick <= 12 ms
 
 If the tree-walker misses budget: profile first, micro-optimize the hot loop
 (node-kind switch, no allocation per step, reused Value scratch), and only
@@ -147,5 +151,9 @@ Do not reach for the compiler before the walker is proven too slow.
   pre-existing goldens never move. previewFor is session-isolated (D38);
   literal splices preserve program identity (D39) — both are tested pins,
   not aspirations.
+- Provenance is post-hoc (D43): never add tracing or evaluator modes for
+  it. Inversion candidates obey D45 and the prediction oracle — an edit
+  that lands the shape anywhere but under the pointer is a bug. Trig goes
+  through the 1e-9 rounding rule (D42) at BOTH sites, always.
 - When something in the spec is ambiguous, pick the simplest interpretation,
   implement it, and record the choice in `docs/decisions.md` — do not stall.

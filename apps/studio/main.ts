@@ -1174,3 +1174,29 @@ rebuild(houseRow);
 //
 // 22. As ever: no math in this file. Steps, snapping, matrix work, splice
 //     rules — all live in src/ui and src/flow with tests.
+
+// ---------------------------------------------------------------------------
+// P4b-T4 — Phase 4b wiring plan (after gates V-prereqs; spec §4):
+//
+// 23. Every op is draggable (D47): pointerdown on a hit-tested op with no
+//     literal ring handle starts a 4b drag; ring handles keep priority
+//     (they ARE the rank-0 candidate for pure-literal anchors).
+//
+// 24. Drag tick: dx,dy from gesture start -> dragCandidates(program, view,
+//     ops, opIndex, dx, dy) -> applyCandidate(rank k) -> previewFor swap.
+//     Keep `k` (the chosen rank) across ticks; recompute candidates each
+//     tick (coefficients can be iteration-dependent only via the FOCUSED
+//     occurrence, which is fixed for the gesture — cache the chains, solve
+//     fresh).
+//
+// 25. TAB during drag: k = (k+1) % candidates.length, re-base the preview
+//     from the ORIGINAL source (never stack edits). Show the current
+//     edit as a chip near the pointer: "55 -> 65 · TAB: move just this one".
+//
+// 26. Axis locks: solve.unadjustable axes render a lock glyph and the
+//     pointer delta is projected onto the live axis before solving.
+//
+// 27. Release: splice via the editor dispatch (ONE undo step), keep the
+//     chip 3 s with an "alternatives" affordance that re-applies a
+//     different candidate as a fresh undo step. All solving stays in
+//     src/flow — this file moves pixels and dispatches text.

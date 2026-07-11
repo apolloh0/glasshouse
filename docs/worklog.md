@@ -356,6 +356,8 @@ base.x, but Gate R requires every palette preview ok — the header pins
 previews as "a program whose display IS the thumbnail", so the PREVIEW
 call (only) infers point-vs-number per param from member access on the
 binding and fills FALLBACK_DEFAULTS; inserts stay zeroed per D38.
+Reviewed (2026-07-10): interpretation call 1 (palette preview type
+inference from body member access) APPROVED.
 
 ## P4a-T6 — draggable literals — 2026-07-10
 Done: numberDragAt, widgetAt, pointHandles per D39. Tests: 203→214 green
@@ -372,6 +374,8 @@ manual script pins the axes at the PIVOT (160,120); axesGlyph maps the
 local origin, so anchorOf (the matrix's fixed point) was added to
 flow/transform and the studio shifts the glyph — placement only, solve
 in flow. Verified live end to end; console clean.
+Reviewed (2026-07-10): interpretation call 2 (anchorOf axes placement at
+the transform fixed point) APPROVED.
 
 ## P4a-T8+T9 / Gates Q–S — 2026-07-10
 Gate Q ✓ suite 215/215 green; the four pre-existing goldens byte-identical

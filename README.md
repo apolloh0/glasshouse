@@ -1,4 +1,4 @@
-# Glasshouse — Phases 0–4a
+# Glasshouse — Phases 0–4b
 
 The deterministic execution engine for **Glasshouse**, a learnable programming
 system in the spirit of Bret Victor's *Learnable Programming*, and **Chalk**,
@@ -37,8 +37,14 @@ and a diff view says what changed between frames. Spec:
 statement completions that preview live before you commit, a parts palette
 of exact thumbnails, and every literal as a control — draggable numbers,
 color and angle widgets, on-stage point handles. Provenance-driven direct
-manipulation is Phase 4b, designed after 4a lands. Spec:
-`docs/phase4a-spec.md`.
+manipulation is Phase 4b. Spec: `docs/phase4a-spec.md`.
+
+**Phase 4b is the summit**: grab any shape — computed, looped, rotated —
+and drag it. Affine provenance chains reconstructed from the existing
+trace say which literals could honestly cause the motion; the candidates
+preview live ("just this house" vs "the spacing between houses"); the
+edit snaps, preserves program identity, and lands where you pointed.
+Spec: `docs/phase4b-spec.md`.
 
 ## Quickstart
 
@@ -56,6 +62,7 @@ manipulation is Phase 4b, designed after 4a lands. Spec:
     docs/phase2-spec.md   Phase 2 spec: tasks P2-T1..P2-T8, gates H-L
     docs/phase3-spec.md   Phase 3 spec: tasks P3-T1..P3-T8, gates M-P
     docs/phase4a-spec.md  Phase 4a spec: tasks P4a-T1..P4a-T9, gates Q-U
+    docs/phase4b-spec.md  Phase 4b spec: tasks P4b-T0..P4b-T6, gates V-Z
     docs/decisions.md     ADR-lite log of decisions already made
     CLAUDE.md             working agreement for Claude Code
     src/lang              lexer, parser, AST (Chalk)

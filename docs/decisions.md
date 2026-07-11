@@ -281,3 +281,57 @@ It is a sibling of the six @codemirror packages already in use, editor-layer
 only (src/editor + apps; the layering bans keep it out of everything else),
 and the model stays pure in src/ui/complete.ts. Recorded per the
 no-new-dependencies-without-an-entry rule.
+
+**D42 — Trig is rounded to the 1e-9 grid (P4b-T0).** Math.cos/sin differ by
+last-bit ULPs across platform libms, so rotation goldens were machine-
+pinned (the pinwheel golden generated on macOS arm64 fails byte-equality
+on Linux x86 — found in review). Both trig sites (the evaluator's affine
+helper and flow/transform.matrixFor) round cos/sin to 1e-9 before use;
+downstream IEEE arithmetic is portable, so rotated coordinates are
+bit-identical everywhere. 1e-9 is invisible at pixel scale. Pinwheel's
+golden regenerates once; the four trig-free goldens must not move.
+
+**D43 — Provenance is post-hoc, affine, and honest.** Chains (value =
+Σ coeff·literal + c) are reconstructed from the existing trace by a pure
+bottom-up AST walk — no evaluator, tracer, or format change; instrumented
+cost untouched. Rules: literals are unit terms; state vars, counters,
+random, pointer are opaque constants at their traced values; definition
+params CHASE their call-site argument chains through callStackAt (the
+house drag depends on it); products with terms on both sides go opaque;
+division scales only by opaque divisors. Cross-frame chains (through
+state) are explicitly out of scope — a later phase if ever.
+
+**D44 — Group matrices are constants in chains.** A world coordinate is
+affine in the shape's literals with the active matrices' entries as
+numbers. Dragging a transformed shape edits the shape, never the angle;
+angle adjustment stays with the 4a angle widget (a rotation handle is
+possible future work).
+
+**D45 — Candidate policy.** Per-axis solve from anchor chains; opaque axes
+lock (reported, no edits); one candidate per nonzero-coeff term,
+to = from + Δ/coeff; rank |Δlit| ascending, ties by source order; pair
+cross-product capped at 6 by total |Δ|; a both-axes literal joins a pair
+only if its two solutions agree within 1e-9 — skip, never average.
+Application uses D39 snapping/formatting and must keep IdTracker at
+0 fresh / 0 dropped. Correctness oracle: prediction consistency — apply,
+re-run, land where pointed (every inversion test ends with it).
+
+**D46 — ANCHOR_SOURCES pinned.** circle/ellipse→center, rect→(left,top),
+line→from, triangle→a; lowered-rect triangles map corner `a` to
+(left, top). 4b's only scalar attr is circle radius ("size").
+
+**D47 — Handles unified; still no browser automation.** Every op is
+draggable in 4b; 4a's ring handles remain the affordance for pure-literal
+anchors. Drag FEEL stays human-gated (Y/Z); all solving is pure and
+vitest-covered, so Playwright still buys little. Final revisit: Phase 6.
+
+**Gates T & U — recorded PASS (2026-07-10).** Gate T: the phase4a-spec §6
+manual script performed — completion with live preview swap, number drag
+with one-step undo, color picker, stage point handle, palette (builtins +
+pasted house thumbnail), pinwheel axes turning at (160,120), group(
+template. Gate U (human): three participants, blank editor, "make a circle
+then make it bigger" — all three succeeded inside 60s via completion +
+drag. Phase 4a closed. Review rulings: P4a interpretation calls 1 (palette
+preview type inference from body member access) and 2 (anchorOf axes
+placement at the transform fixed point) both APPROVED; noted under their
+worklog tasks.
