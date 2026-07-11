@@ -29,6 +29,7 @@
 import type { NodeId, NumberLit, PointLit, Program, Span } from "../lang/ast.js";
 import { pathAt, visit, type AnyNode } from "../lang/walk.js";
 import { children } from "../lang/walk.js";
+import { formatStep, stepForText, type LitStep } from "../util/litformat.js";
 
 export interface NumberDrag {
   span: Span;
@@ -38,15 +39,11 @@ export interface NumberDrag {
 }
 
 /** Step from the literal's TEXTUAL form (D39). */
-function stepOf(source: string, span: Span): 1 | 0.1 {
-  return source.slice(span.start, span.end).includes(".") ? 0.1 : 1;
-}
+const stepOf = (source: string, span: Span): LitStep =>
+  stepForText(source.slice(span.start, span.end));
 
 /** Round to the step and format without trailing zeros beyond it. */
-function fmtStep(v: number, step: 1 | 0.1): string {
-  const rounded = step === 1 ? Math.round(v) : Math.round(v * 10) / 10;
-  return String(rounded);
-}
+const fmtStep = (v: number, step: LitStep): string => formatStep(v, step);
 
 const splice = (source: string, span: Span, text: string): string =>
   source.slice(0, span.start) + text + source.slice(span.end);
