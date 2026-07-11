@@ -335,3 +335,16 @@ drag. Phase 4a closed. Review rulings: P4a interpretation calls 1 (palette
 preview type inference from body member access) and 2 (anchorOf axes
 placement at the transform fixed point) both APPROVED; noted under their
 worklog tasks.
+
+**D48 — attrChain presents op-attribute terms in (coeff, id) order.** The
+shipped `addChains` merges terms by lit-id ascending (its guard pins that).
+The house attrChain ground truth (provenance.test.ts) pins a rect anchor's
+y-chain as `[{lit40,-1},{lit220,1}]` — the SUBTRACTED term (`-h`) before the
+term it adjusts (`base.y`) — which no id-sort produces (a.x stays id-
+ascending, a.y leads with the negative). The one order fitting every pinned
+assertion is coefficient-ascending, lit-id tie-break. So `attrChain`
+canonicalizes its returned anchor/size chains to that key. Term order is
+PRESENTATION ONLY: inversion ranks candidates by |Δlit| and source order
+(D45), never by chain-term order, so re-presenting merged terms changes no
+value (chainValue is invariant). `chainAt` itself is untouched (still
+addChains' id order); only the op-attribute surface canonicalizes.
