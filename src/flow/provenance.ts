@@ -70,7 +70,9 @@ export function addChains(a: Chain, b: Chain, sign: 1 | -1 = 1): Chain {
   const terms = [...m.entries()]
     .filter(([, coeff]) => coeff !== 0)
     .map(([lit, coeff]) => ({ lit, coeff }))
-    .sort((x, y) => x.lit - y.lit);
+    // D48: (coeff, id) is the ONE canonical order — a subtracted term reads
+    // before the term it adjusts, matching the attrChain ground truth.
+    .sort((x, y) => x.coeff - y.coeff || x.lit - y.lit);
   return { terms, c: a.c + sign * b.c };
 }
 
@@ -265,19 +267,6 @@ export const ANCHOR_SOURCES: Readonly<Record<string, string | [string, string]>>
 
 export type OpAttr = "anchor" | "size"; // size: circle radius only in 4b
 
-/** Canonical presentation order for an op-attribute chain's terms: by
- *  coefficient ascending, then lit id (D48). addChains merges by id ascending,
- *  but the attrChain ground truth pins the coefficient order (a subtracted
- *  term like `-h` reads before the term it adjusts). Order is presentation
- *  only — inversion ranks candidates by |Δlit| and source order (D45), never
- *  by this list — so re-presenting the merged terms changes no value. */
-function canon(ch: Chain): Chain {
-  return {
-    terms: [...ch.terms].sort((x, y) => x.coeff - y.coeff || x.lit - y.lit),
-    c: ch.c,
-  };
-}
-
 /** Chain of a call argument (the arg completed just before the op's step). */
 function argChain(
   program: Program, view: TraceView, call: { args: { label: string; value: { id: NodeId } }[] },
@@ -308,7 +297,7 @@ export function attrChain(
     const rch = argChain(program, view, call, "radius", step) as Chain;
     let sc = 1;
     for (const g of groups) sc *= Math.hypot(g.matrix.a, g.matrix.b);
-    return canon(sc === 1 ? rch : scaleChain(rch, sc));
+    return sc === 1 ? rch : scaleChain(rch, sc);
   }
 
   // anchor: map to the source arg(s) per ANCHOR_SOURCES, then apply matrices
@@ -338,5 +327,5 @@ export function attrChain(
     chx = nx;
     chy = ny;
   }
-  return { x: canon(chx), y: canon(chy) };
+  return { x: chx, y: chy };
 }

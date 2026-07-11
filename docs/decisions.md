@@ -336,15 +336,45 @@ preview type inference from body member access) and 2 (anchorOf axes
 placement at the transform fixed point) both APPROVED; noted under their
 worklog tasks.
 
-**D48 — attrChain presents op-attribute terms in (coeff, id) order.** The
-shipped `addChains` merges terms by lit-id ascending (its guard pins that).
+**D48 — (coeff, id) is THE canonical chain term order (unified, reviewed).**
 The house attrChain ground truth (provenance.test.ts) pins a rect anchor's
 y-chain as `[{lit40,-1},{lit220,1}]` — the SUBTRACTED term (`-h`) before the
-term it adjusts (`base.y`) — which no id-sort produces (a.x stays id-
-ascending, a.y leads with the negative). The one order fitting every pinned
-assertion is coefficient-ascending, lit-id tie-break. So `attrChain`
-canonicalizes its returned anchor/size chains to that key. Term order is
-PRESENTATION ONLY: inversion ranks candidates by |Δlit| and source order
-(D45), never by chain-term order, so re-presenting merged terms changes no
-value (chainValue is invariant). `chainAt` itself is untouched (still
-addChains' id order); only the op-attribute surface canonicalizes.
+term it adjusts (`base.y`) — which lit-id-ascending never produces (a.x stays
+id-ascending, a.y leads with the negative). The one order fitting every
+pinned assertion is coefficient-ascending, lit-id tie-break. ORIGINALLY
+`attrChain` canonicalized only its own output while `addChains` kept id
+order; on review this was UNIFIED: `addChains` now sorts by (coeff, then id),
+so every chain everywhere shares one canonical order and the `attrChain`
+canon wrapper is removed. Term order is PRESENTATION ONLY — inversion ranks
+candidates by |Δlit| and source order (D45), never by term order, so
+chainValue is invariant under the re-sort. The shipped algebra guard
+(addChains [3,7] / drop-to-[7]) stays green unchanged: [{3:+1},{7:+3}] is
+already coeff-ascending, and dropping a term is order-independent.
+
+**Gates Y & Z — recorded PASS (2026-07-10).** Gate Y: the phase4b-spec §4
+manual script performed — house #3 two answers with the naming chip, TAB
+toggle, one-undo release with lingering chip, ball horizontal-only with
+y-lock, pinwheel blade lengthening through the matrix, scale-spiral radius
+confirmed via the Phase 3 row hover, undo/redo clean. Gate Z (human): three
+participants did both house-row tasks by dragging inside 45s each and
+articulated the two choices ("just this one" vs "the spacing"). Phase 4b
+closed; Phases 0–4b complete, every automated gate green, every human gate
+(G, L, P, U, Z) recorded PASS.
+
+Review rulings applied: (1) P4b-T0's transform restructuring APPROVED — the
+operation-order pin was intentional and the uncomposed group-spec stack is
+the endorsed transform architecture. (2) D48 APPROVED and UNIFIED (see
+amended D48). (3) D49 added.
+
+**D49 — Drag candidates are exact 2x2 solves per literal pair.** A drag
+candidate that edits two literals solves the 2x2 system
+[xc(Lx) xc(Ly); yc(Lx) yc(Ly)]·[δx;δy] = [dx;dy] (Cramer), so re-running
+lands the WORLD anchor exactly at (drag) before snapping — the coupling
+through a group's rotation matrix is cancelled, not approximated. A singular
+pairing (det ~ 0) is SKIPPED, never averaged. A literal feeding both axes
+joins only if its single-δ solutions agree within 1e-9 (D45), else skipped.
+Per-axis single-literal solving (to = from + Δ/coeff) is the degenerate case
+when one axis is opaque, zero-delta, or the pair is decoupled. Ranking is
+unchanged: total |Δlit| ascending, ties by source order, cap 6. The oracle
+(apply, re-run, land where pointed) is what these serve; the pinwheel blade
+proves it through a live rotation.

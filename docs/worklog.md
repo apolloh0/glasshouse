@@ -446,6 +446,8 @@ Verified live: house two answers (55->65 / TAB 20->50), ball y-lock
 stays a pinwheel; console clean. UX note: committing a drag re-animates
 an animated program and clears focus — re-pause to drag again (matches the
 manual script).
+Reviewed: re-pause-to-drag noted as a Phase 6 polish candidate (keep the
+focused frame across a committed drag on animated programs).
 
 ## P4b-T5+T6 / Gates V-X — 2026-07-10
 Gate V ✓ full suite 232 green (25 skipped = PERF dummies); four trig-free
