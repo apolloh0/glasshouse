@@ -72,8 +72,11 @@ export function matrixFor(args: {
   const s = args.scale && args.scale.t === "num" ? args.scale.v : 1;
   const around = args.around && args.around.t === "point" ? args.around : { x: 0, y: 0 };
   const rad = (deg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
+  // D42: round cos/sin to the 1e-9 grid — the ONLY non-portable ops — so
+  // rotation matrices are bit-identical across platform libms. Must match
+  // the evaluator's roundTrig and tests/determinism-trig.ts exactly.
+  const cos = Math.round(Math.cos(rad) * 1e9) / 1e9;
+  const sin = Math.round(Math.sin(rad) * 1e9) / 1e9;
   // R·S about the origin, conjugated by `around`, then the move. Normalize
   // -0 (e.g. -sin*s at deg 0) so identity is exactly IDENTITY.
   const z = (n: number): number => (Object.is(n, -0) ? 0 : n);

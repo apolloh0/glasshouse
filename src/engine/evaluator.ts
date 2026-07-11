@@ -67,91 +67,125 @@ class ReturnSignal {
 // Canvas-order matrix (a b c d e f): x' = a*x + c*y + e; y' = b*x + d*y + f;
 // positive rotation clockwise on screen (y-down).
 
-interface Xform {
-  a: number; b: number; c: number; d: number; e: number; f: number;
-  /** Product of the uniform `scale:` args — radii and widths multiply by
-   *  this exactly (no hypot round-trip). */
-  s: number;
+// One group's transform, kept UNCOMPOSED. Ops are transformed by folding the
+// active stack innermost-first (function composition = parent·child), which
+// (a) reproduces the natural R·S·(local-around)+around+move op order — pinned
+// bit-exact by tests/determinism-trig.ts — and (b) composes correctly across
+// nesting. cos/sin are rounded to the 1e-9 grid at construction (D42): they
+// are the ONLY non-portable operations, so every downstream IEEE op is
+// bit-identical across platform libms.
+interface GroupXform {
+  cos: number; sin: number; s: number;
+  ax: number; ay: number; // around
+  mx: number; my: number; // move
 }
 
-const XFORM_IDENTITY: Xform = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0, s: 1 };
+/** D42: the pinned trig-rounding rule. Must match tests/determinism-trig.ts
+ *  and flow/transform.matrixFor exactly. */
+const roundTrig = (x: number): number => Math.round(x * 1e9) / 1e9;
 
-function xformMul(p: Xform, q: Xform): Xform {
-  return {
-    a: p.a * q.a + p.c * q.b,
-    b: p.b * q.a + p.d * q.b,
-    c: p.a * q.c + p.c * q.d,
-    d: p.b * q.c + p.d * q.d,
-    e: p.a * q.e + p.c * q.f + p.e,
-    f: p.b * q.e + p.d * q.f + p.f,
-    s: p.s * q.s,
-  };
-}
-
-/** T(move)·T(around)·R(deg)·S(s)·T(-around) — D36's pinned composition. */
-function xformFor(move: { x: number; y: number }, deg: number, scale: number,
-  around: { x: number; y: number }): Xform {
+function groupXform(move: { x: number; y: number }, deg: number, scale: number,
+  around: { x: number; y: number }): GroupXform {
   const rad = (deg * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  // R·S about the origin, then conjugate by `around`, then translate:
-  const a = cos * scale, b = sin * scale, c = -sin * scale, d = cos * scale;
   return {
-    a, b, c, d,
-    e: move.x + around.x - (a * around.x + c * around.y),
-    f: move.y + around.y - (b * around.x + d * around.y),
+    cos: roundTrig(Math.cos(rad)),
+    sin: roundTrig(Math.sin(rad)),
     s: scale,
+    ax: around.x, ay: around.y,
+    mx: move.x, my: move.y,
   };
 }
 
-const xformApply = (m: Xform, x: number, y: number): { x: number; y: number } =>
-  ({ x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f });
-
-/** Composed transform per evaluation context (stack discipline; the WeakMap
- *  keeps EvalContext itself contract-clean). */
-const xformStacks = new WeakMap<EvalContext, Xform[]>();
-
-function currentXform(ctx: EvalContext): Xform | null {
-  const stack = xformStacks.get(ctx);
-  return stack !== undefined && stack.length > 0 ? stack[stack.length - 1]! : null;
+/** One group's conjugation applied to a point. Operation order is load-
+ *  bearing (D42) — do not refactor into a pre-baked affine matrix. */
+function applyGroup(g: GroupXform, x: number, y: number): { x: number; y: number } {
+  const lx = x - g.ax;
+  const ly = y - g.ay;
+  const slx = g.s * lx;
+  const sly = g.s * ly;
+  return {
+    x: g.cos * slx + (-g.sin) * sly + g.ax + g.mx,
+    y: g.sin * slx + g.cos * sly + g.ay + g.my,
+  };
 }
 
-const hasRotation = (m: Xform): boolean =>
-  Math.abs(m.b) > 1e-12 || Math.abs(m.c) > 1e-12;
+/** Fold the active stack over a point, innermost (last-pushed) first. */
+function applyStack(stack: GroupXform[], x: number, y: number): { x: number; y: number } {
+  let px = x, py = y;
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const p = applyGroup(stack[i]!, px, py);
+    px = p.x; py = p.y;
+  }
+  return { x: px, y: py };
+}
+
+/** Product of the active scales — radii and widths multiply by this exactly. */
+const netScale = (stack: GroupXform[]): number => {
+  let s = 1;
+  for (const g of stack) s *= g.s;
+  return s;
+};
+
+/** Does the composed linear part rotate a rect off-axis? Compose the 2x2
+ *  linear parts outer->inner and test the off-diagonal. */
+function netRotates(stack: GroupXform[]): boolean {
+  let a = 1, b = 0, c = 0, d = 1;
+  for (const g of stack) {
+    const ga = g.cos * g.s, gb = g.sin * g.s, gc = -g.sin * g.s, gd = g.cos * g.s;
+    const na = a * ga + c * gb;
+    const nb = b * ga + d * gb;
+    const nc = a * gc + c * gd;
+    const nd = b * gc + d * gd;
+    a = na; b = nb; c = nc; d = nd;
+  }
+  return Math.abs(b) > 1e-12 || Math.abs(c) > 1e-12;
+}
+
+const groupStacks = new WeakMap<EvalContext, GroupXform[]>();
+
+/** The active group stack for a context (created lazily; the WeakMap keeps
+ *  EvalContext itself contract-clean). */
+function groupStack(ctx: EvalContext): GroupXform[] {
+  let stack = groupStacks.get(ctx);
+  if (!stack) { stack = []; groupStacks.set(ctx, stack); }
+  return stack;
+}
 
 /** Eagerly rewrite ops [from, end) into world coordinates (D36): the display
  *  list format never changes; rect lowers to two exact triangles under
  *  rotation; ellipse under rotation is a friendly diagnostic. */
-function applyXformToOps(ctx: EvalContext, m: Xform, from: number, span: Span): void {
+function applyStackToOps(ctx: EvalContext, stack: GroupXform[], from: number, span: Span): void {
+  const rot = netRotates(stack);
+  const sc = netScale(stack);
   const out: DisplayOp[] = [];
   for (let i = from; i < ctx.ops.length; i++) {
     const op = ctx.ops[i]!;
     switch (op.kind) {
       case "circle": {
-        const p = xformApply(m, op.cx, op.cy);
-        out.push({ ...op, cx: p.x, cy: p.y, r: op.r * m.s });
+        const p = applyStack(stack, op.cx, op.cy);
+        out.push({ ...op, cx: p.x, cy: p.y, r: op.r * sc });
         break;
       }
       case "ellipse": {
-        if (hasRotation(m)) {
+        if (rot) {
           throw err("An ellipse can't tilt yet — use a circle here, or draw the ellipse outside the turning group.",
             span);
         }
-        const p = xformApply(m, op.cx, op.cy);
-        out.push({ ...op, cx: p.x, cy: p.y, rx: op.rx * m.s, ry: op.ry * m.s });
+        const p = applyStack(stack, op.cx, op.cy);
+        out.push({ ...op, cx: p.x, cy: p.y, rx: op.rx * sc, ry: op.ry * sc });
         break;
       }
       case "rect": {
-        if (!hasRotation(m)) {
-          const p = xformApply(m, op.x, op.y);
-          out.push({ ...op, x: p.x, y: p.y, w: op.w * m.s, h: op.h * m.s });
+        if (!rot) {
+          const p = applyStack(stack, op.x, op.y);
+          out.push({ ...op, x: p.x, y: p.y, w: op.w * sc, h: op.h * sc });
           break;
         }
         // corners A B C D -> triangles ABC + ACD, one step index (D36)
-        const A = xformApply(m, op.x, op.y);
-        const B = xformApply(m, op.x + op.w, op.y);
-        const C = xformApply(m, op.x + op.w, op.y + op.h);
-        const D = xformApply(m, op.x, op.y + op.h);
+        const A = applyStack(stack, op.x, op.y);
+        const B = applyStack(stack, op.x + op.w, op.y);
+        const C = applyStack(stack, op.x + op.w, op.y + op.h);
+        const D = applyStack(stack, op.x, op.y + op.h);
         out.push(
           { kind: "triangle", ax: A.x, ay: A.y, bx: B.x, by: B.y, cx: C.x, cy: C.y,
             fill: op.fill, sourceNodeId: op.sourceNodeId, stepIndex: op.stepIndex },
@@ -161,16 +195,16 @@ function applyXformToOps(ctx: EvalContext, m: Xform, from: number, span: Span): 
         break;
       }
       case "triangle": {
-        const A = xformApply(m, op.ax, op.ay);
-        const B = xformApply(m, op.bx, op.by);
-        const C = xformApply(m, op.cx, op.cy);
+        const A = applyStack(stack, op.ax, op.ay);
+        const B = applyStack(stack, op.bx, op.by);
+        const C = applyStack(stack, op.cx, op.cy);
         out.push({ ...op, ax: A.x, ay: A.y, bx: B.x, by: B.y, cx: C.x, cy: C.y });
         break;
       }
       case "line": {
-        const p1 = xformApply(m, op.x1, op.y1);
-        const p2 = xformApply(m, op.x2, op.y2);
-        out.push({ ...op, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, width: op.width * m.s });
+        const p1 = applyStack(stack, op.x1, op.y1);
+        const p2 = applyStack(stack, op.x2, op.y2);
+        out.push({ ...op, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, width: op.width * sc });
         break;
       }
     }
@@ -320,14 +354,8 @@ function execStmt(ctx: EvalContext, s: Stmt): void {
             break;
         }
       }
-      const own = xformFor(move, deg, scale, around);
-      const parent = currentXform(ctx);
-      let stack = xformStacks.get(ctx);
-      if (!stack) {
-        stack = [];
-        xformStacks.set(ctx, stack);
-      }
-      stack.push(parent ? xformMul(parent, own) : own);
+      const stack = groupStack(ctx);
+      stack.push(groupXform(move, deg, scale, around));
       try {
         execBlock(ctx, s.body);
       } finally {
@@ -523,8 +551,8 @@ function evalCall(ctx: EvalContext, call: CallExpr): Value | null {
       builtin.emit!(checked, ctx.ops, { sourceNodeId: call.id, stepIndex: ctx.stepIndex });
       // D36: transforms apply EAGERLY at emit — ops leave here in world
       // coordinates; nothing downstream knows groups exist.
-      const m = currentXform(ctx);
-      if (m) applyXformToOps(ctx, m, op0, call.span);
+      const stack = groupStacks.get(ctx);
+      if (stack && stack.length > 0) applyStackToOps(ctx, stack, op0, call.span);
     }
     finishStep(ctx, call.id, STEP_KIND.expr, result, op0);
     return result;
