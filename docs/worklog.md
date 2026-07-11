@@ -394,3 +394,70 @@ iterationGrid 0.74 (15); writeEvents+stateRows 1.90 (10); valuesForNode
 1.04 (5); varSeries 0.54 (80); diffDisplay 0.27 (2).
 Gates T and U: pending human — scripts presented, awaiting results.
 4b designer note: instrumented headroom now 3.81 of 30 ms (spec §8 asked).
+
+## P4b-T0 — trig determinism — 2026-07-10
+Done: both trig sites round Math.cos/sin to the 1e-9 grid (D42); the
+evaluator's transform layer restructured from a pre-composed affine matrix
+to an UNCOMPOSED group-spec stack folded innermost-first, so the natural
+R·S·(local-around)+around+move op order is reproduced bit-exact (pinned by
+determinism-trig) while nesting still composes. Only pinwheel's golden
+regenerated; four trig-free goldens sha-identical. Tests: 217→220 green.
+Committed alone per instruction. Surprises: the op ORDER (not just the
+rounding) is load-bearing — a pre-baked matrix computes cos*240 which can't
+be bit-identical to cos*80.
+
+## P4b-T1 — chainAt — 2026-07-10
+Done: post-hoc affine chain reconstruction (D43) — literals unit terms;
+counters/state/random/pointer opaque at recorded values; product rule
+(both termful -> opaque); param CHASE through callStackAt. Tests: 220→green
+(chainAt block). Surprises: none.
+
+## P4b-T2 — attrChain — 2026-07-10
+Done: ANCHOR_SOURCES mapping + active matrices as constants (D44).
+Tests: provenance 8/8.
+Surprises/deviations: the house a.y ground truth pins term order
+[lit40(-1), lit220(+1)] — subtracted term first — which the shipped
+addChains (id-ascending, guard-pinned) structurally CANNOT produce. Values
+are provably correct (chainValue + coeffs match); only order differs. Ran
+the test, confirmed it's pure ordering, and reconciled per D48: attrChain
+canonicalizes returned anchor/size terms to (coeff, id) order. Term order
+is presentation only — inversion ranks by |Δlit|/source order (D45), never
+chain order. Recorded D48; flagged for review.
+
+## P4b-T3 — inversion (Gate W) — 2026-07-10
+Done: scalarCandidates (per-term Δ/coeff, gentlest-first); dragCandidates
+solving from attrChain's WORLD anchor — decoupled axes reduce to Δ/coeff,
+coupled (rotated) axes use a joint 2x2 per-literal-pair solve so BOTH world
+axes land exactly; opaque axes -> unadjustable; dedup + total-|Δ| rank +
+cap 6; applyCandidate descending-span splices with the D39 formatter.
+Tests: invert 6/6 (Gate W), drag still 10/10. Surprises: the pinwheel
+oracle forced the joint solve — independent per-axis on world chains leaves
+a c·(Δ/d) cross-error = 7·tanθ, huge for a 99° blade; the 2x2 solve cancels
+it, and the test's 1px tolerance is then purely snapping (|M|·0.5). D39
+formatter extracted to src/util/litformat.ts (ui<->flow can't import each
+other); drag.ts reuses it.
+
+## P4b-T4 — studio direct manipulation — 2026-07-10
+Done: plan 23-27 — every focused-frame op draggable, rank[0] applied live,
+TAB cycles (re-based), pointer chip with snapped values + lock/alt hints,
+one undo step per gesture, chip lingers 3 s. Tests: unchanged.
+Verified live: house two answers (55->65 / TAB 20->50), ball y-lock
+(160->185 only), pinwheel blade edits (250,120) through the matrix and
+stays a pinwheel; console clean. UX note: committing a drag re-animates
+an animated program and clears focus — re-pause to drag again (matches the
+manual script).
+
+## P4b-T5+T6 / Gates V-X — 2026-07-10
+Gate V ✓ full suite 232 green (25 skipped = PERF dummies); four trig-free
+goldens byte-identical to their phase0-gates shas; pinwheel stable since
+its single T0 regeneration.
+Gate W ✓ provenance 8/8 + invert 6/6 + determinism-trig 3/3 — the house's
+two honest answers with both predictions holding, respread-vs-shift, ball
+axis lock, rotated blade landing where pointed.
+Gate X ✓ PERF=1 (medians): dragCandidates 0.052 ms/3 (house-row),
+0.006 ms/5 (@50k), full drag tick 0.06 ms/12 (bouncing-ball). No cross-
+phase regression: parse+fast 2.75/100, instrumented 4.31/30, fast 0.22/5,
+match 6.16/10, scrubView 0.014/2, iterationGrid 0.78/15, previewFor
+0.06/20, completionsAt 0.021/2, writeEvents+stateRows 2.22/10,
+valuesForNode 0.98/5, varSeries 0.55/80, diffDisplay 0.263/2.
+Gates Y (manual) and Z (human) pending — scripts presented, awaiting result.
