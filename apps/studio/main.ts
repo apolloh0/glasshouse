@@ -66,6 +66,7 @@ import { activeGroupsAt, anchorOf, axesGlyph } from "../../src/flow/transform.js
 import { completionsAt, previewFor } from "../../src/ui/complete.js";
 import { paletteEntries } from "../../src/ui/palette.js";
 import { numberDragAt, pointHandles, widgetAt } from "../../src/ui/drag.js";
+import { applyCandidate, dragCandidates, type DragSolve } from "../../src/flow/invert.js";
 import {
   cellZoomMode, numericSummary, stridedSamples, valueCells, valuesForNode,
 } from "../../src/flow/cells.js";
@@ -1038,9 +1039,115 @@ stage.addEventListener("mousemove", (ev) => {
     clearHover();
   }
 });
+// ---------- Phase 4b: direct manipulation (op drags -> inversion) ----------
+
+const chip = document.createElement("div");
+chip.id = "dragchip";
+chip.style.cssText =
+  "position:fixed;z-index:20;background:#333;color:#fff;font:11px system-ui;" +
+  "padding:3px 7px;border-radius:4px;pointer-events:none;display:none;";
+document.body.appendChild(chip);
+let chipTimer = 0;
+
+/** Active op-drag gesture (plan 24). Solving stays in src/flow; this holds
+ *  only pixels + the chosen alternative index. */
+let opDrag: {
+  opIndex: number;
+  sx: number; sy: number;      // stage-coord gesture start
+  cx: number; cy: number;      // latest stage coords (for the chip)
+  k: number;                   // chosen candidate rank (TAB cycles)
+  source: string;             // ORIGINAL doc — every tick re-bases from here
+  solve: DragSolve | null;
+} | null = null;
+
+function beginOpDrag(opIndex: number, sx: number, sy: number): void {
+  opDrag = { opIndex, sx, sy, cx: sx, cy: sy, k: 0, source: view.state.doc.toString(), solve: null };
+}
+
+/** Render the edited program at the focused frame (static -> frame 0). */
+function renderEditedAt(source: string): void {
+  if (!focused) return;
+  const s = new Session(source, 42);
+  if (isAnimated) s.advanceFrames(focused.k + 1);
+  render(s.displayAt(focused.k));
+}
+
+/** Show the value the splice will actually write (D39 step: integer literals
+ *  snap to 1, decimals to 0.1) rather than the raw solve. */
+const snap = (from: number, to: number): string =>
+  Number.isInteger(from) ? String(Math.round(to)) : String(Math.round(to * 10) / 10);
+
+function describeCand(solve: DragSolve, k: number): string {
+  const edits = solve.candidates[k]!.edits;
+  const body = edits.map((e) => e.from + " → " + snap(e.from, e.to)).join(", ");
+  const more = solve.candidates.length > 1 ? "  ·  TAB: alternatives" : "";
+  const lock = solve.unadjustable.length > 0 ? "  ·  " + solve.unadjustable.join("/") + " locked" : "";
+  return body + more + lock;
+}
+
+function showChip(text: string, cx: number, cy: number): void {
+  const rect = stage.getBoundingClientRect();
+  chip.textContent = text;
+  chip.style.left = rect.left + cx + 12 + "px";
+  chip.style.top = rect.top + cy - 8 + "px";
+  chip.style.display = "block";
+}
+
+function opDragMove(cx: number, cy: number): void {
+  if (!opDrag || !focused || !lastGoodProgram) return;
+  opDrag.cx = cx;
+  opDrag.cy = cy;
+  const dx = cx - opDrag.sx;
+  const dy = cy - opDrag.sy;
+  const ops = focused.view.display.ops;
+  const solve = dragCandidates(lastGoodProgram, focused.view, ops, opDrag.opIndex, dx, dy);
+  opDrag.solve = solve;
+  if (solve.candidates.length === 0) {
+    renderEditedAt(opDrag.source); // nothing honest to change; hold still
+    showChip(solve.unadjustable.length > 0 ? solve.unadjustable.join("/") + " locked" : "—", cx, cy);
+    return;
+  }
+  const k = opDrag.k % solve.candidates.length;
+  const edited = applyCandidate(opDrag.source, lastGoodProgram, solve.candidates[k]!);
+  renderEditedAt(edited);
+  showChip(describeCand(solve, k), cx, cy);
+}
+
+function endOpDrag(): void {
+  if (!opDrag || !lastGoodProgram) { opDrag = null; return; }
+  const solve = opDrag.solve;
+  if (solve && solve.candidates.length > 0) {
+    const k = opDrag.k % solve.candidates.length;
+    const edited = applyCandidate(opDrag.source, lastGoodProgram, solve.candidates[k]!);
+    // commit as ONE undo step (plan 27); rebuild re-focuses and re-renders
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: edited },
+      userEvent: "input.drag",
+    });
+    // the chip lingers 3 s offering the alternative
+    window.clearTimeout(chipTimer);
+    chip.style.display = "block";
+    chipTimer = window.setTimeout(() => { chip.style.display = "none"; }, 3000);
+  } else {
+    chip.style.display = "none";
+  }
+  opDrag = null;
+}
+
+// TAB during a drag cycles the candidate, re-basing from the original source.
+window.addEventListener("keydown", (ev) => {
+  if (!opDrag || ev.key !== "Tab" || !opDrag.solve) return;
+  ev.preventDefault();
+  if (opDrag.solve.candidates.length > 1) {
+    opDrag.k = (opDrag.k + 1) % opDrag.solve.candidates.length;
+    opDragMove(opDrag.cx, opDrag.cy);
+  }
+});
+
 stage.addEventListener("mousedown", (ev) => {
   const { x, y } = stagePos(ev);
-  // point handles win over program input (plan 20)
+  // point handles win over program input AND op-drags (plan 20/23: a ring
+  // handle IS the rank-0 candidate for a pure-literal anchor)
   const handle = handleAt(x, y);
   if (handle) {
     ev.preventDefault();
@@ -1057,6 +1164,27 @@ stage.addEventListener("mousedown", (ev) => {
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return;
+  }
+  // Phase 4b (plan 23): every op is draggable on a FOCUSED frame — inversion
+  // works out which literals honestly cause the motion.
+  if (focused && lastGoodProgram) {
+    const opIndex = hitTest(x, y);
+    if (opIndex >= 0) {
+      ev.preventDefault();
+      beginOpDrag(opIndex, x, y);
+      const onMove = (m: MouseEvent): void => {
+        const p = stagePos(m);
+        opDragMove(p.x, p.y);
+      };
+      const onUp = (): void => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        endOpDrag();
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      return;
+    }
   }
   pointer.down = true;
   if (isAnimated) pendingEvents.push({ type: "pointer-pressed", x, y });
@@ -1080,6 +1208,28 @@ rebuild(houseRow);
   valuesAt: (pos: number) => valuesAtPos(pos),
   startCompletion: () => startCompletion(view),
   acceptCompletion: () => acceptCompletion(view),
+  // 4b drag driver for the manual/smoke scripts (real gestures go through
+  // the stage listeners; this just scripts them at stage coords).
+  opDrag: (sx: number, sy: number, cx: number, cy: number, tabs = 0) => {
+    const opIndex = hitTest(sx, sy);
+    if (opIndex < 0 || !focused) return { hit: false };
+    beginOpDrag(opIndex, sx, sy);
+    opDragMove(cx, cy);
+    for (let i = 0; i < tabs; i++) {
+      if (opDrag && opDrag.solve && opDrag.solve.candidates.length > 1) {
+        opDrag.k = (opDrag.k + 1) % opDrag.solve.candidates.length;
+        opDragMove(cx, cy);
+      }
+    }
+    const solve = opDrag?.solve ?? null;
+    endOpDrag();
+    return {
+      hit: true,
+      unadjustable: solve?.unadjustable ?? [],
+      candidates: solve?.candidates.length ?? 0,
+      doc: view.state.doc.toString(),
+    };
+  },
 };
 
 // ---------------------------------------------------------------------------
