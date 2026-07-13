@@ -13,16 +13,27 @@
 // pretty-printer; unchanged code is always preserved by span splicing,
 // never re-printed (D50's untouched-id pin depends on it).
 
-import { TODO } from "../util/todo.js";
+import { showValue } from "./format.js";
 
+/** A bare number in learner style (integers bare, else 2 decimals, -0 tamed). */
+export function numText(n: number): string {
+  return showValue({ t: "num", v: n });
+}
+
+/** The value at 1-based index i of an affine sequence v_j = base+(j-1)*step,
+ *  as canonical simplified Chalk (D56). */
 export function affineText(base: number, step: number): string {
-  void base; void step;
-  TODO("P5-T0", "canonical simplified forms per header");
+  if (step === 0) return numText(base);                 // "B"
+  if (base === 0 && step === 1) return "i - 1";          // "i - 1"
+  if (base === 0) return "(i - 1) * " + numText(step);   // "(i - 1) * S"
+  if (base === step) return "i * " + numText(step);      // "i * S"
+  // otherwise: B + (i - 1) * S, negative step reads "B - (i - 1) * |S|"
+  const sign = step < 0 ? " - " : " + ";
+  return numText(base) + sign + "(i - 1) * " + numText(Math.abs(step));
 }
 
 export function pointText(x: number, y: number): string {
-  void x; void y;
-  TODO("P5-T0");
+  return "(" + numText(x) + ", " + numText(y) + ")";
 }
 
 /** Splice replacement of [start, end) with text; the workhorse every
@@ -30,6 +41,5 @@ export function pointText(x: number, y: number): string {
 export function splice(
   source: string, start: number, end: number, text: string,
 ): string {
-  void source; void start; void end; void text;
-  TODO("P5-T0");
+  return source.slice(0, start) + text + source.slice(end);
 }
