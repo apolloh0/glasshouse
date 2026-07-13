@@ -378,3 +378,54 @@ when one axis is opaque, zero-delta, or the pair is decoupled. Ranking is
 unchanged: total |Δlit| ascending, ties by source order, cap 6. The oracle
 (apply, re-run, land where pointed) is what these serve; the pinwheel blade
 proves it through a live rotation.
+
+**D50 — Gestures are output-preserving, verified by the display oracle.**
+Every abstraction gesture (Phase 5) is checked by
+serializeDisplayList(before) === serializeDisplayList(after) over setup and
+a 60-frame same-seed run for animated programs. A gesture that changes a
+pixel is a bug. Second pin: statements the gesture did not rewrite keep
+their stable ids (fresh/dropped confined to the rewritten region);
+unchanged code is span-spliced, never re-printed. The studio re-runs the
+oracle before committing so a failing transform is never shown.
+
+**D51 — nameThisNumber emits a `state` decl.** Chalk has one binding
+concept; a named constant is a state var (bonus: it shows in the state
+panel at once). Placement is AFTER the last existing state decl (else after
+paper, else line 1) so evaluation order — and thus the picture — cannot
+shift. The literal's use site becomes the name.
+
+**D52 — connectNumbers candidate policy.** Name litA, replace it, then rank
+litB: equal values -> [same]; ratio k=B/A with 2k an integer ->
+[scale (name*k), offset (name+d)]; otherwise [offset]. Offsets read
+"name + d" (or "name - |d|"). Every candidate is oracle-clean by
+construction; the learner disambiguates by seeing the previews.
+
+**D53 — repeatThis affine unification.** k>=2 consecutive siblings unify iff
+structurally identical up to NUMBER leaves (colors/angles/strings/bools/
+names/callees exact; first mismatch named in a friendly reason). Each
+number position must be constant or affine in the 1-based index
+(v_j = base+(j-1)*step); non-affine spacing declines with the real gaps.
+Structural-up-to-numbers reuses fingerprintNode with number leaves masked
+— not a fresh tree walk.
+
+**D54 — teachThis relativizes to a point parameter.** Selected statements
+become `to name(at: p): ... end` with `bind` = "p" (D37's field, finally
+spent). The first shape's literal anchor (ANCHOR_SOURCES) is the origin;
+body point literals rewrite to (p.x+dx, p.y+dy), dx==0 folding to p.x. The
+selection becomes `name(at: (anchor))`. Requires a literal anchor on the
+first shape; scalars stay literal (compose with nameThisNumber to
+parameterize a size).
+
+**D55 — openThisUp inlines and folds.** The inverse of teach: a call to a
+user definition inlines its body with args substituted for binds; a point
+literal substituted into a member access FOLDS (p.x, p:=(60,80) -> 60) so
+no member-on-literal is ever emitted. v1 requires literal/bare-name args
+(richer args decline in learner words). Pinned identity:
+open(teach(S)) draws byte-identically to S.
+
+**D56 — Synthesis style is pinned in one place.** synth.ts is the sole
+source of emitted text: numbers via showValue, points "(x, y)", two-space
+indent, one space after label colons, and canonical simplified affine forms
+(step 0 -> "B"; base 0 step 1 -> "i - 1"; base 0 -> "(i - 1) * S"; base==step
+-> "i * S"; else "B + (i - 1) * S"; negative step uses " - (i - 1) * |S|").
+It covers only what gestures emit; it is not a general pretty-printer.

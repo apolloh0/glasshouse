@@ -1,4 +1,4 @@
-# Glasshouse — Phases 0–4b
+# Glasshouse — Phases 0–5
 
 The deterministic execution engine for **Glasshouse**, a learnable programming
 system in the spirit of Bret Victor's *Learnable Programming*, and **Chalk**,
@@ -63,6 +63,7 @@ Spec: `docs/phase4b-spec.md`.
     docs/phase3-spec.md   Phase 3 spec: tasks P3-T1..P3-T8, gates M-P
     docs/phase4a-spec.md  Phase 4a spec: tasks P4a-T1..P4a-T9, gates Q-U
     docs/phase4b-spec.md  Phase 4b spec: tasks P4b-T0..P4b-T6, gates V-Z
+    docs/phase5-spec.md   Phase 5 spec: tasks P5-T0..P5-T8, gates AA-AE
     docs/decisions.md     ADR-lite log of decisions already made
     CLAUDE.md             working agreement for Claude Code
     src/lang              lexer, parser, AST (Chalk)

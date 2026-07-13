@@ -8,7 +8,7 @@ import { parser } from "../src/editor/gen/chalk-parser.js";
 import { lex } from "../src/lang/lexer.js";
 
 const ex = (name: string): string => readFileSync("examples/" + name, "utf8");
-const EXAMPLES = ["bouncing-ball.chalk", "house-row.chalk", "pointer-paint.chalk", "scale-spiral.chalk", "pinwheel.chalk"];
+const EXAMPLES = ["bouncing-ball.chalk", "house-row.chalk", "pointer-paint.chalk", "scale-spiral.chalk", "pinwheel.chalk", "five-houses.chalk"];
 
 function collectNodes(source: string): SyntaxNode[] {
   const out: SyntaxNode[] = [];

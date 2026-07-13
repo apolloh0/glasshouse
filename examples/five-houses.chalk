@@ -1,0 +1,9 @@
+// Gate AE fixture: house-row's loop written out by hand, five times.
+// "Make this shorter without changing the picture" -> repeat this.
+paper(color: #EAF4FB)
+
+rect(left: 20, top: 200, width: 30, height: 40, fill: #C46A3D)
+rect(left: 75, top: 200, width: 30, height: 40, fill: #C46A3D)
+rect(left: 130, top: 200, width: 30, height: 40, fill: #C46A3D)
+rect(left: 185, top: 200, width: 30, height: 40, fill: #C46A3D)
+rect(left: 240, top: 200, width: 30, height: 40, fill: #C46A3D)

@@ -1,4 +1,4 @@
-# CLAUDE.md — Glasshouse (Phases 0–4b)
+# CLAUDE.md — Glasshouse (Phases 0–5)
 
 Phase 0: deterministic, replayable, instrumented interpreter for the Chalk
 language (`docs/phase0-spec.md`, tasks T1..T11, gates A–C).
@@ -19,6 +19,9 @@ P4a-T1..P4a-T9, gates Q–U).
 Phase 4b: direct manipulation — post-hoc affine provenance, drag
 inversion with honest disambiguation, trig determinism
 (`docs/phase4b-spec.md`, tasks P4b-T0..P4b-T6, gates V–Z).
+Phase 5: create by abstracting — the five output-preserving gestures
+(name/connect/repeat/teach/open) (`docs/phase5-spec.md`, tasks
+P5-T0..P5-T8, gates AA–AE).
 **Phases are strictly ordered**: finish each phase's gates before starting
 the next; work each phase's tasks in order.
 
@@ -105,6 +108,8 @@ the no-DOM rule for the rest of `src/`). The Lezer tree is presentation only
   completionsAt <= 2 ms @ synthetic-500; drag loop <= 10 ms
 - Phase 4b (`bench/perf-invert.test.ts`): dragCandidates <= 3 ms
   (house-row) / <= 5 ms (@50k); full drag tick <= 12 ms
+- Phase 5 (`bench/perf-gesture.test.ts`): each gesture + its oracle re-run
+  <= 15 ms on-fixture
 
 If the tree-walker misses budget: profile first, micro-optimize the hot loop
 (node-kind switch, no allocation per step, reused Value scratch), and only
@@ -155,5 +160,9 @@ Do not reach for the compiler before the walker is proven too slow.
   it. Inversion candidates obey D45 and the prediction oracle — an edit
   that lands the shape anywhere but under the pointer is a bug. Trig goes
   through the 1e-9 rounding rule (D42) at BOTH sites, always.
+- Gestures (Phase 5) are output-preserving (D50): the display oracle
+  (byte-identical before/after) is the correctness test, and untouched
+  statements keep their stable ids. All emitted text comes from synth.ts
+  (D56); unchanged code is span-spliced, never re-printed.
 - When something in the spec is ambiguous, pick the simplest interpretation,
   implement it, and record the choice in `docs/decisions.md` — do not stall.
