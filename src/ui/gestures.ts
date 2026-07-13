@@ -94,6 +94,22 @@ function lineEndAfter(source: string, pos: number): number {
   return nl === -1 ? source.length : nl + 1;
 }
 
+interface Edit { start: number; end: number; text: string }
+
+/** Apply edits in descending-span order so earlier offsets stay valid. */
+function applyEdits(source: string, edits: Edit[]): string {
+  let out = source;
+  for (const e of [...edits].sort((a, b) => b.start - a.start)) {
+    out = splice(out, e.start, e.end, e.text);
+  }
+  return out;
+}
+
+/** `name + d` / `name - |d|` — a co-varying offset (D52). */
+function offsetText(name: string, d: number): string {
+  return d < 0 ? name + " - " + numText(-d) : name + " + " + numText(d);
+}
+
 /** Where a new `state` decl goes (D51): after the last state decl, else
  *  after the paper line, else the top of the file. */
 function stateInsertOffset(source: string, program: Program): number {
@@ -148,8 +164,44 @@ export interface ConnectCandidate extends GestureOk {
 export function connectNumbers(
   source: string, program: Program, litA: NodeId, litB: NodeId, name: string,
 ): { ok: true; candidates: ConnectCandidate[] } | GestureNo {
-  void source; void program; void litA; void litB; void name;
-  TODO("P5-T2", "candidate policy per D52");
+  const check = validName(program, name);
+  if (check !== true) return { ok: false, reason: check };
+  const nodes = nodeMap(program);
+  const a = nodes.get(litA);
+  const b = nodes.get(litB);
+  if (!a || a.kind !== "number" || !b || b.kind !== "number") {
+    return { ok: false, reason: "Pick two numbers to connect." };
+  }
+  const A = a.value;
+  const B = b.value;
+  const declOffset = stateInsertOffset(source, program);
+  const declText = "state " + name + " = " + numText(A) + "\n";
+
+  // Every candidate: name litA (state decl + use site), then rewrite litB.
+  const build = (kind: ConnectCandidate["kind"], litBText: string, note: string): ConnectCandidate => ({
+    ok: true, kind, note,
+    source: applyEdits(source, [
+      { start: declOffset, end: declOffset, text: declText },
+      { start: a.span.start, end: a.span.end, text: name },
+      { start: b.span.start, end: b.span.end, text: litBText },
+    ]),
+  });
+
+  let candidates: ConnectCandidate[];
+  if (B === A) {
+    candidates = [build("same", name, "same as " + name)];
+  } else if (A !== 0 && Number.isInteger((2 * B) / A)) {
+    const k = B / A;
+    const d = B - A;
+    candidates = [
+      build("scale", name + " * " + numText(k), name + " * " + numText(k)),
+      build("offset", offsetText(name, d), offsetText(name, d)),
+    ];
+  } else {
+    const d = B - A;
+    candidates = [build("offset", offsetText(name, d), offsetText(name, d))];
+  }
+  return { ok: true, candidates };
 }
 
 export function repeatThis(
