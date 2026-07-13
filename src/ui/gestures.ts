@@ -353,16 +353,165 @@ export function findRepeatRuns(
   return runs;
 }
 
+// D46/D54: which call argument(s) anchor each shape (mirrors provenance's
+// ANCHOR_SOURCES; src/ui may not import src/flow, so it is pinned here too).
+const ANCHOR_SOURCES: Readonly<Record<string, string | [string, string]>> = {
+  circle: "center", ellipse: "center", rect: ["left", "top"], line: "from", triangle: "a",
+};
+
+/** The first shape's literal anchor (bx, by), or null if it isn't a plain
+ *  point of number literals (D54 requires one). */
+function shapeAnchor(call: AnyNode & { kind: "call" }): { bx: number; by: number } | null {
+  const src = ANCHOR_SOURCES[call.callee];
+  if (src === undefined) return null;
+  const argVal = (label: string): AnyNode | null =>
+    call.args.find((a) => a.label === label)?.value ?? null;
+  if (typeof src === "string") {
+    const pt = argVal(src);
+    if (!pt || pt.kind !== "point" || pt.x.kind !== "number" || pt.y.kind !== "number") return null;
+    return { bx: pt.x.value, by: pt.y.value };
+  }
+  const lx = argVal(src[0]);
+  const ty = argVal(src[1]);
+  if (!lx || lx.kind !== "number" || !ty || ty.kind !== "number") return null;
+  return { bx: lx.value, by: ty.value };
+}
+
+/** `p.axis`, `p.axis + d`, or `p.axis - |d|` (dx == 0 folds to `p.axis`). */
+const memberText = (axis: "x" | "y", d: number): string =>
+  d === 0 ? "p." + axis : d > 0 ? "p." + axis + " + " + numText(d) : "p." + axis + " - " + numText(-d);
+
+/** Literal points (both coords are number leaves) inside a subtree, pre-order. */
+function litPointsOf(node: AnyNode): AnyNode[] {
+  const out: AnyNode[] = [];
+  const rec = (n: AnyNode): void => {
+    if (n.kind === "point" && n.x.kind === "number" && n.y.kind === "number") { out.push(n); return; }
+    for (const c of children(n)) rec(c);
+  };
+  rec(node);
+  return out;
+}
+
+/** The def-placement offset: above the first existing definition, else after
+ *  the last state decl / paper (D54). */
+function defPlacement(source: string, program: Program): number {
+  if (program.defs.size > 0) {
+    let min = Infinity;
+    for (const d of program.defs.values()) min = Math.min(min, d.span.start);
+    return source.lastIndexOf("\n", min - 1) + 1;
+  }
+  return stateInsertOffset(source, program);
+}
+
 export function teachThis(
   source: string, program: Program, stmtIds: readonly NodeId[], name: string,
 ): GestureResult {
-  void source; void program; void stmtIds; void name;
-  TODO("P5-T4", "anchor relativization per D54; bind = \"p\"");
+  const check = validName(program, name);
+  if (check !== true) return { ok: false, reason: check };
+  const nodes = nodeMap(program);
+  const stmts = stmtIds.map((id) => nodes.get(id)).filter((n): n is AnyNode => n !== undefined);
+  if (stmts.length === 0) return { ok: false, reason: "Pick shapes to teach." };
+  const sorted = [...stmts].sort((a, b) => a.span.start - b.span.start);
+  const first = sorted[0]!;
+  const call = first.kind === "expr" ? first.expr : null;
+  if (!call || call.kind !== "call") return { ok: false, reason: "Teach a group of shapes." };
+  const anchor = shapeAnchor(call);
+  if (!anchor) {
+    return { ok: false, reason: "The first shape needs a plain point to anchor to — give it numbers, not a computed spot." };
+  }
+
+  // Each body statement, with every literal point relativized to `p` (D54).
+  const relativize = (stmt: AnyNode): string => {
+    const start = stmt.span.start;
+    let text = source.slice(start, stmt.span.end);
+    const edits = litPointsOf(stmt).map((pt) => {
+      const p = pt as AnyNode & { kind: "point"; x: { value: number }; y: { value: number } };
+      const rep = "(" + memberText("x", p.x.value - anchor.bx) + ", " +
+        memberText("y", p.y.value - anchor.by) + ")";
+      return { start: pt.span.start - start, end: pt.span.end - start, text: rep };
+    });
+    for (const e of edits.sort((a, b) => b.start - a.start)) text = splice(text, e.start, e.end, e.text);
+    return text;
+  };
+
+  const body = sorted.map((s) => "  " + relativize(s)).join("\n");
+  const defText = "to " + name + "(at: p):\n" + body + "\nend\n";
+  const callText = name + "(at: " + pointText(anchor.bx, anchor.by) + ")";
+  const placement = defPlacement(source, program);
+  // replace the selection (higher offset) first, then insert the def (lower)
+  let out = splice(source, sorted[0]!.span.start, sorted[sorted.length - 1]!.span.end, callText);
+  out = splice(out, placement, placement, defText);
+  return { ok: true, source: out, note: "taught " + name };
 }
 
 export function openThisUp(
   source: string, program: Program, callStmt: NodeId,
 ): GestureResult {
-  void source; void program; void callStmt;
-  TODO("P5-T5", "substitution + point-member folding per D55");
+  const nodes = nodeMap(program);
+  const stmt = nodes.get(callStmt);
+  const call = stmt && stmt.kind === "expr" ? stmt.expr : null;
+  if (!stmt || !call || call.kind !== "call") return { ok: false, reason: "Open up a shape you taught." };
+  const def = program.defs.get(call.callee);
+  if (!def) return { ok: false, reason: "`" + call.callee + "` isn't something you taught." };
+
+  // bind -> arg; v1 only opens plain-value arguments (D55)
+  const subst = new Map<string, AnyNode>();
+  for (const param of def.params) {
+    const arg = call.args.find((a) => a.label === param.name)?.value;
+    const plain = arg && (
+      arg.kind === "number" || arg.kind === "color" || arg.kind === "angle" ||
+      arg.kind === "string" || arg.kind === "bool" || arg.kind === "name" ||
+      (arg.kind === "point" && arg.x.kind === "number" && arg.y.kind === "number"));
+    if (!plain) {
+      return { ok: false, reason: "This `" + call.callee +
+        "` has an input that's too rich to open yet — open works when the inputs are plain values." };
+    }
+    subst.set(param.bind ?? param.name, arg!);
+  }
+
+  // Inline each body statement with binds substituted; a point-literal bind
+  // FOLDS through a member (`p.x` -> its component value), never emitting a
+  // member on a parenthesized literal (D55).
+  const inlineStmt = (bodyStmt: AnyNode): string => {
+    const start = bodyStmt.span.start;
+    let text = source.slice(start, bodyStmt.span.end);
+    const edits: Edit[] = [];
+    const rec = (n: AnyNode): void => {
+      if (n.kind === "member" && n.object.kind === "name" && subst.has(n.object.name)) {
+        const arg = subst.get(n.object.name)!;
+        if (arg.kind === "point") {
+          const comp = n.member === "x" ? arg.x : n.member === "y" ? arg.y : null;
+          if (comp && comp.kind === "number") {
+            edits.push({ start: n.span.start - start, end: n.span.end - start, text: numText(comp.value) });
+            return;
+          }
+        }
+      }
+      if (n.kind === "name" && subst.has(n.name)) {
+        const arg = subst.get(n.name)!;
+        const repl = arg.kind === "point" && arg.x.kind === "number" && arg.y.kind === "number"
+          ? pointText(arg.x.value, arg.y.value)
+          : source.slice(arg.span.start, arg.span.end);
+        edits.push({ start: n.span.start - start, end: n.span.end - start, text: repl });
+        return;
+      }
+      for (const c of children(n)) rec(c);
+    };
+    rec(bodyStmt);
+    for (const e of edits.sort((a, b) => b.start - a.start)) text = splice(text, e.start, e.end, e.text);
+    return text;
+  };
+
+  const bodyText = def.body.map(inlineStmt).join("\n");
+  const edits: Edit[] = [{ start: stmt.span.start, end: stmt.span.end, text: bodyText }];
+  // If this was the definition's LAST call site, remove the now-unused def
+  // (so open is the exact inverse of teach — the round-trip pin).
+  let otherCalls = 0;
+  visit(program, (n) => {
+    if (n.kind === "call" && n.callee === call.callee && n.id !== call.id) otherCalls++;
+  });
+  if (otherCalls === 0) {
+    edits.push({ start: def.span.start, end: lineEndAfter(source, def.span.end), text: "" });
+  }
+  return { ok: true, source: applyEdits(source, edits), note: "opened " + call.callee };
 }
