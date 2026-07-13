@@ -388,6 +388,23 @@ their stable ids (fresh/dropped confined to the rewritten region);
 unchanged code is span-spliced, never re-printed. The studio re-runs the
 oracle before committing so a failing transform is never shown.
 
+*AMENDED (2026-07-13, reviewed) — the visual oracle is `serializeVisual`,
+not `serializeDisplayList`.* The full serialization embeds `sourceNodeId`
+and `stepIndex`; any statement insertion renumbers parse-time ids and step
+counters, so a byte-identical full serialization is UNSATISFIABLE by any
+correct gesture (proof: a static program's `state` decl must precede the
+shape that reads it — naming `20` shifts sourceNodeId 4→6, stepIndex 8→11,
+picture unchanged). `serializeVisual` (render/displayList.ts) emits bg +
+every geometric/color/stroke field in draw order, excluding ONLY those two
+provenance columns; it still fails on a reordered draw, changed op count,
+or any moved coordinate/color (pinned by tests/visual.test.ts). The oracle
+is now TWO co-required clauses, both asserted for every gesture: (1)
+`serializeVisual` equality over setup + the frame run (the picture holds),
+and (2) the untouched-identity pin (IdTracker, Gate AB) covering provenance
+for code the gesture didn't touch. Neither alone is sufficient.
+`serializeDisplayList` is unchanged — goldens, linking, and scrubbing keep
+the full form.
+
 **D51 — nameThisNumber emits a `state` decl.** Chalk has one binding
 concept; a named constant is a state var (bonus: it shows in the state
 panel at once). Placement is AFTER the last existing state decl (else after

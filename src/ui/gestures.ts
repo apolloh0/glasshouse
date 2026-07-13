@@ -67,23 +67,78 @@
 // validName — a usable new name: identifier-shaped, not a keyword, not a
 //   builtin, not already bound (state/def/param) in the program.
 
+import type { AnyNode } from "../lang/walk.js";
 import type { NodeId, Program } from "../lang/ast.js";
+import { visit } from "../lang/walk.js";
+import { KEYWORDS } from "../lang/tokens.js";
+import { BUILTINS } from "../engine/stdlib.js";
+import { numText, splice } from "./synth.js";
 import { TODO } from "../util/todo.js";
 
 export interface GestureOk { ok: true; source: string; note: string }
 export interface GestureNo { ok: false; reason: string }
 export type GestureResult = GestureOk | GestureNo;
 
+const KEYWORD_SET: ReadonlySet<string> = new Set(KEYWORDS);
+
+/** NodeId -> node for the whole program (built per call; programs are small). */
+function nodeMap(program: Program): Map<NodeId, AnyNode> {
+  const m = new Map<NodeId, AnyNode>();
+  visit(program, (n) => m.set(n.id, n));
+  return m;
+}
+
+/** Position just after the newline ending the line that contains `pos`. */
+function lineEndAfter(source: string, pos: number): number {
+  const nl = source.indexOf("\n", pos);
+  return nl === -1 ? source.length : nl + 1;
+}
+
+/** Where a new `state` decl goes (D51): after the last state decl, else
+ *  after the paper line, else the top of the file. */
+function stateInsertOffset(source: string, program: Program): number {
+  const decls = program.setup.filter((s) => s.kind === "state");
+  if (decls.length > 0) return lineEndAfter(source, decls[decls.length - 1]!.span.end);
+  const paper = program.setup.find(
+    (s) => s.kind === "expr" && s.expr.kind === "call" && s.expr.callee === "paper");
+  return paper ? lineEndAfter(source, paper.span.end) : 0;
+}
+
 export function validName(program: Program, name: string): true | string {
-  void program; void name;
-  TODO("P5-T1");
+  if (!/^[A-Za-z_]\w*$/.test(name)) {
+    return "A name starts with a letter and uses letters, numbers, or _.";
+  }
+  if (KEYWORD_SET.has(name)) return "`" + name + "` is a word Chalk already uses.";
+  if (BUILTINS.has(name)) return "`" + name + "` is already a shape.";
+  for (const s of program.setup) {
+    if (s.kind === "state" && s.name === name) return "`" + name + "` is already taken.";
+  }
+  if (program.defs.has(name)) return "`" + name + "` is already taken.";
+  for (const def of program.defs.values()) {
+    for (const p of def.params) {
+      if (p.name === name || p.bind === name) return "`" + name + "` is already taken.";
+    }
+  }
+  return true;
 }
 
 export function nameThisNumber(
   source: string, program: Program, lit: NodeId, name: string,
 ): GestureResult {
-  void source; void program; void lit; void name;
-  TODO("P5-T1", "state-decl emission per D51");
+  const check = validName(program, name);
+  if (check !== true) return { ok: false, reason: check };
+  const node = nodeMap(program).get(lit);
+  if (!node || node.kind !== "number") {
+    return { ok: false, reason: "Pick a number to give a name." };
+  }
+  const declOffset = stateInsertOffset(source, program);
+  const declText = "state " + name + " = " + numText(node.value) + "\n";
+  // Splice the use site first (higher offset), then insert the decl (lower
+  // offset stays valid). D51: the picture cannot move — placement after the
+  // last state decl keeps evaluation order.
+  let out = splice(source, node.span.start, node.span.end, name);
+  out = splice(out, declOffset, declOffset, declText);
+  return { ok: true, source: out, note: "named " + numText(node.value) + " as " + name };
 }
 
 export interface ConnectCandidate extends GestureOk {

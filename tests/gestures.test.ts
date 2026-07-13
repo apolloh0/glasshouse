@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { parse } from "../src/lang/parser.js";
 import { Session } from "../src/host/run.js";
 import { IdTracker } from "../src/host/ids.js";
-import { serializeDisplayList } from "../src/render/displayList.js";
+import { serializeVisual } from "../src/render/displayList.js";
 import { pathAt, visit } from "../src/lang/walk.js";
 import {
   connectNumbers, findRepeatRuns, nameThisNumber, openThisUp, repeatThis,
@@ -22,29 +22,45 @@ const P = "paper(color: #FFFFFF)\n";
 
 function samePicture(a: string, b: string, frames = 60): void {
   const sa = new Session(a, 42), sb = new Session(b, 42);
-  expect(serializeDisplayList(sb.displayAt(0)))
-    .toBe(serializeDisplayList(sa.displayAt(0)));
+  expect(serializeVisual(sb.displayAt(0)))
+    .toBe(serializeVisual(sa.displayAt(0)));
   if (parse(a).frames.length > 0 || parse(a).events.length > 0) {
     sa.advanceFrames(frames); sb.advanceFrames(frames);
     for (const k of [1, 29, 30, frames - 1]) {
-      expect(serializeDisplayList(sb.displayAt(k)))
-        .toBe(serializeDisplayList(sa.displayAt(k)));
+      expect(serializeVisual(sb.displayAt(k)))
+        .toBe(serializeVisual(sa.displayAt(k)));
     }
   }
 }
 
 function litAt(program: Program, src: string, needle: string): number {
-  const hit = [...pathAt(program, src.indexOf(needle))].reverse()
-    .find((n) => n.kind === "number");
-  expect(hit, needle).toBeTruthy();
-  return hit!.id;
+  // The first number literal at or after the needle position (a needle like
+  // "radius: 20" starts on the label, not the number).
+  const from = src.indexOf(needle);
+  let best = Infinity;
+  let id: number | undefined;
+  visit(program, (n) => {
+    if (n.kind === "number" && n.span.start >= from && n.span.start < best) {
+      best = n.span.start;
+      id = n.id;
+    }
+  });
+  expect(id, needle).toBeTruthy();
+  return id!;
 }
 
 function stmtAt(program: Program, src: string, needle: string): number {
-  const hit = [...pathAt(program, src.indexOf(needle))].reverse()
-    .find((n) => n.kind === "expr");
-  expect(hit, needle).toBeTruthy();
-  return hit!.id;
+  // The first call statement whose text begins with the needle (a needle
+  // like "house(at:" also occurs in a `to house(at:...` definition header,
+  // which is not a statement — match the statement, not the first index).
+  let id: number | undefined;
+  visit(program, (n) => {
+    if (id === undefined && n.kind === "expr" && src.slice(n.span.start).startsWith(needle)) {
+      id = n.id;
+    }
+  });
+  expect(id, needle).toBeTruthy();
+  return id!;
 }
 
 describe("synth (P5-T0)", () => {

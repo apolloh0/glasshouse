@@ -70,6 +70,38 @@ export function serializeDisplayList(dl: DisplayList): string {
   return `{"bg":${bg},"ops":[` + dl.ops.map(serializeOp).join(",") + "]}";
 }
 
+// ---------- visual serialization (the Phase 5 gesture oracle, D50) ----------
+// Same draw order and every geometric + color/stroke field as serializeOp,
+// EXCLUDING ONLY sourceNodeId and stepIndex. Those provenance columns shift
+// whenever a statement is inserted (parse-time ids and step counters
+// renumber), which any abstraction gesture necessarily does — so full
+// serialization can never byte-match across a gesture even when the picture
+// is identical. serializeVisual IS the pixel-level oracle: it still fails on
+// a reordered draw, a changed op count, or any moved coordinate/color. The
+// untouched-identity pin (IdTracker, Gate AB) is the SEPARATE co-required
+// clause that covers provenance for code the gesture did not touch.
+
+function serializeVisualOp(op: DisplayOp): string {
+  switch (op.kind) {
+    case "circle":
+      return `["c",${num(op.cx)},${num(op.cy)},${num(op.r)},${op.fill}]`;
+    case "ellipse":
+      return `["e",${num(op.cx)},${num(op.cy)},${num(op.rx)},${num(op.ry)},${op.fill}]`;
+    case "rect":
+      return `["r",${num(op.x)},${num(op.y)},${num(op.w)},${num(op.h)},${op.fill}]`;
+    case "triangle":
+      return `["t",${num(op.ax)},${num(op.ay)},${num(op.bx)},${num(op.by)},${num(op.cx)},${num(op.cy)},${op.fill}]`;
+    case "line":
+      return `["l",${num(op.x1)},${num(op.y1)},${num(op.x2)},${num(op.y2)},${op.stroke},${num(op.width)}]`;
+  }
+}
+
+/** Visual equality: same picture, provenance columns exempt (D50). */
+export function serializeVisual(dl: DisplayList): string {
+  const bg = dl.bg === null ? "null" : String(dl.bg);
+  return `{"bg":${bg},"ops":[` + dl.ops.map(serializeVisualOp).join(",") + "]}";
+}
+
 /** FNV-1a 32-bit, hex — used by goldens to fingerprint long frame runs. */
 export function fnv1a(s: string): string {
   let h = 0x811c9dc5;
