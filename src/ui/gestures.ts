@@ -69,10 +69,11 @@
 
 import type { AnyNode } from "../lang/walk.js";
 import type { NodeId, Program } from "../lang/ast.js";
-import { visit } from "../lang/walk.js";
+import { children, visit } from "../lang/walk.js";
+import { maskedFingerprintNode } from "../lang/fingerprint.js";
 import { KEYWORDS } from "../lang/tokens.js";
 import { BUILTINS } from "../engine/stdlib.js";
-import { numText, splice } from "./synth.js";
+import { affineText, numText, pointText, splice } from "./synth.js";
 import { TODO } from "../util/todo.js";
 
 export interface GestureOk { ok: true; source: string; note: string }
@@ -204,18 +205,152 @@ export function connectNumbers(
   return { ok: true, candidates };
 }
 
+/** Pre-order number-literal nodes of a subtree. */
+function numbersOf(node: AnyNode): AnyNode[] {
+  const out: AnyNode[] = [];
+  const rec = (n: AnyNode): void => {
+    if (n.kind === "number") out.push(n);
+    for (const c of children(n)) rec(c);
+  };
+  rec(node);
+  return out;
+}
+
+/** The first non-number difference between two structurally-similar nodes,
+ *  named in learner words — or null if they differ only in numbers. */
+function firstDiff(a: AnyNode, b: AnyNode): string | null {
+  if (a.kind !== b.kind) return "the shapes are built differently";
+  switch (a.kind) {
+    case "number": return null; // numbers are allowed to vary
+    case "color": return a.rgb !== (b as typeof a).rgb ? "the color" : null;
+    case "angle": return a.degrees !== (b as typeof a).degrees ? "the angle" : null;
+    case "string": return a.value !== (b as typeof a).value ? "the text" : null;
+    case "bool": return a.value !== (b as typeof a).value ? "the true/false" : null;
+    case "name": return a.name !== (b as typeof a).name ? "the name `" + a.name + "`" : null;
+    case "member":
+      if (a.member !== (b as typeof a).member) return "the `." + a.member + "` part";
+      break;
+    case "call": {
+      const bc = b as typeof a;
+      if (a.callee !== bc.callee) return "the shape `" + a.callee + "`";
+      if (a.args.length !== bc.args.length ||
+          a.args.some((x, i) => x.label !== bc.args[i]!.label)) return "the labels";
+      break;
+    }
+    case "binop":
+      if (a.op !== (b as typeof a).op) return "the `" + a.op + "`";
+      break;
+    case "unary":
+      if (a.op !== (b as typeof a).op) return "the `" + a.op + "`";
+      break;
+    default: break;
+  }
+  const ak = children(a), bk = children(b);
+  if (ak.length !== bk.length) return "the shapes are built differently";
+  for (let i = 0; i < ak.length; i++) {
+    const d = firstDiff(ak[i]!, bk[i]!);
+    if (d) return d;
+  }
+  return null;
+}
+
+/** Unify k statements up to numbers, returning the rewritten single body
+ *  (numbers replaced by their affine/constant forms) or a friendly decline. */
+function analyzeRun(stmts: AnyNode[], source: string): { ok: true; body: string } | GestureNo {
+  const k = stmts.length;
+  if (k < 2) return { ok: false, reason: "Pick at least two shapes to repeat." };
+  const fp0 = maskedFingerprintNode(stmts[0]!);
+  for (let j = 1; j < k; j++) {
+    if (maskedFingerprintNode(stmts[j]!) !== fp0) {
+      const what = firstDiff(stmts[0]!, stmts[j]!) ?? "the shapes";
+      return { ok: false, reason: "These shapes aren't all the same — " + what +
+        " changes. Repeat needs them identical except for numbers." };
+    }
+  }
+  const numberLists = stmts.map(numbersOf); // equal length (masked-fp identical)
+  const L = numberLists[0]!.length;
+  const forms: string[] = [];
+  for (let p = 0; p < L; p++) {
+    const values = numberLists.map((nl) => (nl[p]! as { value: number }).value);
+    const base = values[0]!;
+    const step = values[1]! - base;
+    let affine = true;
+    for (let j = 0; j < k; j++) {
+      if (Math.abs(values[j]! - (base + j * step)) > 1e-9) { affine = false; break; }
+    }
+    if (!affine) {
+      const gaps: string[] = [];
+      for (let j = 1; j < k; j++) gaps.push(numText(values[j]! - values[j - 1]!));
+      return { ok: false, reason: "These aren't evenly spaced — the gaps are " +
+        gaps.join(", then ") + ". Repeat needs even steps." };
+    }
+    forms.push(affineText(base, step));
+  }
+  const start = stmts[0]!.span.start;
+  let body = source.slice(start, stmts[0]!.span.end);
+  const edits = numberLists[0]!.map((n, p) => ({
+    start: n.span.start - start, end: n.span.end - start, text: forms[p]!,
+  }));
+  for (const e of edits.sort((x, y) => y.start - x.start)) {
+    body = splice(body, e.start, e.end, e.text);
+  }
+  return { ok: true, body };
+}
+
 export function repeatThis(
   source: string, program: Program, stmtIds: readonly NodeId[],
 ): GestureResult {
-  void source; void program; void stmtIds;
-  TODO("P5-T3", "affine unification per D53; forms per D56");
+  const nodes = nodeMap(program);
+  const stmts = stmtIds.map((id) => nodes.get(id)).filter((n): n is AnyNode => n !== undefined);
+  if (stmts.length !== stmtIds.length) return { ok: false, reason: "Pick shapes to repeat." };
+  const sorted = [...stmts].sort((a, b) => a.span.start - b.span.start);
+  const r = analyzeRun(sorted, source);
+  if (!r.ok) return r;
+  const k = sorted.length;
+  const indented = r.body.split("\n").map((l) => "  " + l).join("\n");
+  const loopText = "repeat " + k + " as i:\n" + indented;
+  return {
+    ok: true,
+    source: splice(source, sorted[0]!.span.start, sorted[k - 1]!.span.end, loopText),
+    note: "rolled " + k + " shapes into a loop",
+  };
+}
+
+/** Every list of consecutive statement siblings (top level + each block). */
+function siblingLists(program: Program): AnyNode[][] {
+  const lists: AnyNode[][] = [program.items as AnyNode[]];
+  visit(program, (n) => {
+    if (n.kind === "frame" || n.kind === "event" || n.kind === "to" ||
+        n.kind === "group" || n.kind === "repeat" || n.kind === "for") {
+      lists.push(n.body);
+    } else if (n.kind === "if") {
+      lists.push(n.then);
+      if (n.else_) lists.push(n.else_);
+    }
+  });
+  return lists;
 }
 
 export function findRepeatRuns(
   program: Program,
 ): { stmts: NodeId[]; count: number }[] {
-  void program;
-  TODO("P5-T3");
+  const source = program.source;
+  const runs: { stmts: NodeId[]; count: number }[] = [];
+  for (const sibs of siblingLists(program)) {
+    let i = 0;
+    while (i < sibs.length) {
+      const fp = maskedFingerprintNode(sibs[i]!);
+      let j = i + 1;
+      while (j < sibs.length && maskedFingerprintNode(sibs[j]!) === fp) j++;
+      const run = sibs.slice(i, j);
+      if (run.length >= 3 && analyzeRun(run, source).ok) {
+        runs.push({ stmts: run.map((n) => n.id), count: run.length });
+      }
+      i = j;
+    }
+  }
+  runs.sort((a, b) => b.count - a.count); // longest first
+  return runs;
 }
 
 export function teachThis(

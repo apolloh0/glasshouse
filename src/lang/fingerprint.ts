@@ -48,6 +48,15 @@ export function fingerprintNode(node: AnyNode): number {
   return fnv1aString(node.kind + "\x1f" + salient(node) + "\x1f" + kids.join(","));
 }
 
+/** Like fingerprintNode but NUMBER leaves are masked (every number equal) —
+ *  structural-up-to-numbers, the primitive repeatThis (D53) unifies on.
+ *  Colors/angles/strings/bools/names/callees still contribute exactly. */
+export function maskedFingerprintNode(node: AnyNode): number {
+  const kids = children(node).map(maskedFingerprintNode);
+  const s = node.kind === "number" ? "#" : salient(node);
+  return fnv1aString(node.kind + "\x1f" + s + "\x1f" + kids.join(","));
+}
+
 /** NodeId -> fingerprint for every node, computed in one bottom-up pass. */
 export function fingerprintIndex(program: Program): Map<NodeId, number> {
   const index = new Map<NodeId, number>();
