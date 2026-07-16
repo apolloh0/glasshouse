@@ -446,3 +446,47 @@ indent, one space after label colons, and canonical simplified affine forms
 (step 0 -> "B"; base 0 step 1 -> "i - 1"; base 0 -> "(i - 1) * S"; base==step
 -> "i * S"; else "B + (i - 1) * S"; negative step uses " - (i - 1) * |S|").
 It covers only what gestures emit; it is not a general pretty-printer.
+
+**Gates AA–AE — Phase 5 closed (recorded 2026-07-16).** AA (regression): full
+suite green, all goldens byte-identical. AB (gesture demos + identity):
+`tests/gestures.test.ts` fully green — every gesture oracle-clean on its
+fixture, decline cases friendly and jargon-free, the teach/open round trip
+byte-identical, untouched rows keeping their stable ids. AC (budgets): each
+gesture + its oracle re-run ≤ 15 ms on-fixture (`bench/perf-gesture.test.ts`,
+PERF=1). **AD (manual §5) — recorded PASS:** the phase5-spec §5 studio
+acceptance script performed and reported by review — name → a `state` decl;
+connect → `×2` / offset chips with live previews; the five-houses run underline
+→ `repeat this` as an affine index loop, picture identical; select rect+triangle
+→ `teach this` → `to hut(at: p)` + call + a 4a point-handle move; `hut(...)` →
+`open this up`, members folded, picture identical; every gesture a single undo
+step throughout. **AE (HUMAN) — recorded PASS:** three participants, house-row's
+five hand-written circles on screen (`examples/five-houses.chalk`), task "make
+this shorter without changing the picture" — each found `repeat this`, applied
+it, SAW the picture hold, and could say why the loop means the same drawing;
+then "pull one house out as its own thing" → `teach this`. Recorded as
+G/L/P/U/Z were. Phase 5 closed; Phases 0–5 complete — every automated gate
+(A–C, D–F, H–K, M–O, Q–S, V–X, AA–AC) green, every human gate
+(G, L, P, U, Z, AD, AE) recorded PASS. The `phase5-gates` tag stands at
+`d995ec4` (both human gates PASS; no move needed).
+
+**Phase 5 scaffold strip — found, reverted, audited (recorded 2026-07-16).**
+The Phase 5 scaffold commit (`055d872`), whose delta was described as changing
+no implemented file, in fact rewrote `apps/studio/main.ts` (−151/+27),
+stripping ~124 net lines of shipped P4b-T4 direct-manipulation wiring (the
+op-drag driver, candidate/TAB cycling, `unadjustable` locking, point-handle
+precedence, `renderEditedAt`). Root cause: the designer's sanity check counted
+the plan-comment lines the scaffold *added*, not the code it *removed*, so a
+net-positive-looking diff hid a destructive overwrite of an implemented file.
+Restored **verbatim from `71b7b56`** (P4b-T4) at `ac4111c`, with the 4b op-drag
+re-verified live; `main.ts` is unchanged since. **APPROVED** — the delta wrongly
+shipped an implemented file as an overwrite.
+*Companion audit (2026-07-16) — the five files the delta touched besides
+`main.ts`, diffed against `71b7b56`:* CLAUDE.md and README.md — additive only
+(Phase 5 title/summary/budget/workflow lines). `tests/hover.test.ts` and
+`tests/lezer.test.ts` — each only *appended* `five-houses.chalk` to its
+`EXAMPLES` array (parallel-conformance and hover coverage grew; no test
+dropped, so nothing could have failed silently). The sole `decisions.md`
+"deletion" is the D48 rewrite, which is the Phase 4b gate-closing amendment
+(`c4c2864`, "D48 UNIFIED"), not a Phase 5 removal. **No 4b-era content required
+restoring** — the scaffold's silent strip was confined to `main.ts`, already
+fixed at `ac4111c`.

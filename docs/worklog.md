@@ -528,3 +528,19 @@ Gate AC ✓ PERF=1 (medians): nameThisNumber 0.07 ms, repeatThis x12
 green, no regression: parse+fast 2.13/100, instrumented 3.82/30,
 dragCandidates 0.073/3, drag tick 0.06/12.
 Gates AD (manual §5) and AE (human) pending — scripts presented.
+
+## Gates AD/AE — Phase 5 closed — 2026-07-16
+Done: AD (manual §5) and AE (human, three participants) reported PASS and
+recorded in decisions.md; the scaffold-strip finding + verbatim 71b7b56
+restore recorded and approved. Audit of the five delta-touched docs/test
+files vs 71b7b56 (CLAUDE.md, README.md, decisions.md, hover.test.ts,
+lezer.test.ts) found NOTHING removed: hover/lezer only appended five-houses
+to EXAMPLES (coverage grew), and the lone decisions.md rewrite (D48) is the
+Phase 4b closing amendment (c4c2864), not a Phase 5 removal. Tests: 256
+green (unchanged, docs-only). Surprises/deviations: none.
+Phase 5 closed; phase5-gates tag stands at d995ec4.
+Open questions for Phase 6: accessibility surfaced from the Phase 1
+vocabulary registry; keyboard-drivable manipulation + gestures; packaging;
+curriculum. Carried threads: re-pause-after-drag; point/rotation-handle
+unification; serializeVisual as the oracle for any Phase 6 source
+transforms.
