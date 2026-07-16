@@ -15,8 +15,6 @@
 //    title (never restate its meaning — the learner can query it).
 //  - Numbers/values render via showValue. One voice everywhere.
 
-import { TODO } from "../util/todo.js";
-
 export const ANNOUNCEMENT_KEYS = [
   "focus.op",          // {kind, index, count} "circle, 3 of 10"
   "focus.none",        // {} "nothing focused"
@@ -40,17 +38,34 @@ export function requiredAnnouncementKeys(): readonly string[] {
   return ANNOUNCEMENT_KEYS;
 }
 
-/** P6-T1 — fill for every key. Two exemplars set the register: plain,
- *  short, present-tense, no jargon, actions named by their keys. */
+/** P6-T1 — one template per key. The two exemplars set the register: plain,
+ *  short, present-tense, no jargon, actions named by their keys. The rest
+ *  follow it. Notes ({note}, {reason}, {message}) arrive already learner-
+ *  worded from the studio (values composed via showValue upstream); the
+ *  template only frames them, never restates a card's meaning. */
 export const TEMPLATES: ReadonlyMap<string, (slots: Record<string, unknown>) => string> =
   new Map<string, (slots: Record<string, unknown>) => string>([
     ["focus.op", (s) => `${s["kind"]}, ${s["index"]} of ${s["count"]}`],
+    ["focus.none", () => `nothing focused`],
+    ["drag.start", (s) =>
+      `moving the ${s["kind"]} — arrows to move, enter to keep, escape to stop`],
+    ["drag.step", (s) => `now at ${s["x"]}, ${s["y"]}`],
+    ["drag.candidate", (s) =>
+      `changing ${s["note"]}, choice ${s["index"]} of ${s["count"]} — TAB for alternatives`],
     ["drag.locked", (s) =>
       `${s["axis"] === "y" ? "up and down" : "left and right"} is set by the program here`],
+    ["drag.commit", (s) => `${s["note"]}`],
+    ["drag.cancel", () => `left it as it was`],
+    ["gesture.applied", (s) => `${s["name"]} — ${s["note"]}`],
+    ["gesture.declined", (s) => `${s["reason"]}`],
+    ["completion.preview", (s) => `${s["label"]} — press enter to add it`],
+    ["diagnostic", (s) => `${s["message"]}`],
+    ["frame.focus", (s) => `frame ${s["frame"]}`],
+    ["scrub.step", (s) => `running ${s["line"]}`],
   ]);
 
 export function announce(key: AnnouncementKey, slots: Record<string, unknown>): string {
   const t = TEMPLATES.get(key);
-  if (!t) TODO("P6-T1", "template missing: " + key);
-  return t!(slots);
+  if (!t) throw new Error("announce: no template for " + key);
+  return t(slots);
 }
