@@ -544,3 +544,61 @@ vocabulary registry; keyboard-drivable manipulation + gestures; packaging;
 curriculum. Carried threads: re-pause-after-drag; point/rotation-handle
 unification; serializeVisual as the oracle for any Phase 6 source
 transforms.
+
+## Phase 6 — ship it (P6-T0..T7) — 2026-07-16
+Done, one commit per task (new-files-only delta; existing-file changes are
+the §7 append-payloads):
+- T0: applied §7 payloads (D57–D61, CLAUDE.md, main.ts plan comment);
+  decisions 56→61; phase6.test.ts 9 green / 9 red. Committed alone.
+- T1: announce.ts TEMPLATES for all 14 keys; announcements 3/3. (11/7)
+- T2: studio a11y — #live aria-live fed only by announce(); stage
+  role/label; focus order = display order; diagnostics spoken. Manual (AH.1).
+- T3: keys.ts pure machine (keymap green 3/3) + studio keydown→kstep→effects
+  onto the pointer's own entry points; one voice via announce effects. (14/4)
+- T4: packaging — exports map (./engine, ./ui, ./editor) + src/ui/index.ts
+  barrel; npm run build clean; package block 2/2. (15/3)
+- T5: lessons 2–8 (eight-lesson arc); curriculum 3/3; targets eyeballed. (16/2)
+- T6: rotate.ts rotationHandles (2/2) + studio arc-knob drag + re-pause
+  after drag; D62 records the first ui→flow edge. phase6 18/18 green.
+Tests: 256 (Phase 5) → 274 green (+18 phase6), 28 skipped (PERF). typecheck
+clean. Surprises/deviations: (1) §7.4 package.json deferred T0→T4 per the
+task list + its T4 barrel dependency; (2) CLAUDE.md title left "(Phases
+0–5)" — §7.2 specified no bump and verbatim discipline forbids improvising;
+(3) live re-pause capped at frame 0 by background-tab rAF throttling (the
+mechanism is frame-index-agnostic; AH.5 is the human non-zero-frame check).
+
+Gate AF ✓ full suite 274 green, 28 skipped; goldens byte-identical since
+Phase 5 close (empty diff); full PERF sweep 28/28, all under budget.
+Gate AG ✓ phase6.test.ts 18/18; npm run build clean; engine-side dist
+(host/lang/engine/render/flow) carries no @codemirror/@lezer/editor import
+— the publishable-core boundary holds on built output.
+
+CLOSING BENCHMARK TABLE (PERF=1, medians, dev machine 2026-07-16):
+  Phase 0  parse+fast @50k         2.49 ms   (budget 100 — ~40x)
+           instrumented @50k       4.46 ms   (budget  30 — ~6.7x)
+           fast @5k                0.23 ms   (budget   5 — ~22x)
+  Phase 1  editor loop bouncing    0.21 ms   (budget  50)
+           editor loop house-row   0.29 ms   (budget  50)
+           editor loop pointer     0.09 ms   (budget  50)
+           editor loop synth-500   5.25 ms   (budget 100 — ~19x)
+  Phase 2  matchPrograms 500-line  6.39 ms   (budget  10 — 1.6x)
+           scrubView @50k          0.015 ms  (budget   2 — ~130x)
+           iterationGrid @50k      0.76 ms   (budget  15 — ~20x)
+  Phase 3  writeEvents+rows @5k    2.21 ms   (budget  10 — 4.5x)
+           valuesForNode @50k      1.01 ms   (budget   5 — ~5x)
+           varSeries 64-frame      0.55 ms   (budget  80 — ~145x)
+           diffDisplay @500        0.269 ms  (budget   2 — ~7.4x)
+  Phase 4a previewFor (5 examples) 0.02–0.11 ms (budget 20)
+           completionsAt synth-500 0.025 ms  (budget   2 — ~80x)
+           drag loop bouncing      0.05 ms   (budget  10)
+  Phase 4b dragCandidates house    0.052 ms  (budget   3)
+           dragCandidates @50k     0.006 ms  (budget   5)
+           drag tick bouncing      0.06 ms   (budget  12)
+  Phase 5  nameThisNumber+oracle   0.09 ms   (budget  15)
+           repeatThis x12+oracle   0.12 ms   (budget  15)
+           teachThis+oracle        0.08 ms   (budget  15)
+  No regression anywhere; every budget cleared with headroom. Phase 6 adds
+  no engine work, so the numbers track Phase 5's.
+
+Gates AH (manual) and AI (HUMAN) — scripts presented, pending human.
+Gate AJ (ship, tag v0.1.0) — pending AI.
