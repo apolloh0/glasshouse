@@ -1,0 +1,3 @@
+paper(color: #FFFFFF)
+rect(left: 60, top: 140, width: 60, height: 60, fill: #E8A33D)
+triangle(a: (60, 140), b: (120, 140), c: (90, 100), fill: #C0392B)

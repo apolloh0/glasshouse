@@ -1,0 +1,19 @@
+{
+  "id": "lesson-03-make-your-own",
+  "title": "Make your own",
+  "goal": "Add a new shape from the list or the parts on the side.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "builtin:circle",
+      "say": "Point at circle. This one is drawn for you already." },
+    { "do": "complete", "card": "builtin:rect",
+      "say": "On a new line start typing rect, then pick it from the list." },
+    { "do": "palette",
+      "say": "Or drag a box out of the parts on the side of the screen." },
+    { "do": "hover", "card": "param:rect.left",
+      "say": "Point at left to slide the box sideways into place." },
+    { "do": "check",
+      "say": "Your picture should have a circle and a box, like the target." }
+  ]
+}

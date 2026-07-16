@@ -1,0 +1,21 @@
+{
+  "id": "lesson-08-grab-and-spin",
+  "title": "Grab and spin",
+  "goal": "Move and turn shapes on the picture with your own hands.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "construct:group",
+      "say": "Point at group. It moves, turns, or grows everything inside." },
+    { "do": "hover", "card": "param:group.rotate",
+      "say": "Point at rotate. How far to turn the shapes, in degrees." },
+    { "do": "drag",
+      "say": "Drag the box on the picture to move it. The numbers follow your hand." },
+    { "do": "rotate",
+      "say": "Drag the round handle to spin the box. Watch rotate change as you turn." },
+    { "do": "edit", "find": "rotate: 0", "replace": "rotate: 30",
+      "say": "Or type the angle straight in: change 0 to 30." },
+    { "do": "check",
+      "say": "The box should sit turned a little, like the target." }
+  ]
+}

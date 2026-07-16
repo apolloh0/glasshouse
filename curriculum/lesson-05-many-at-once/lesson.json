@@ -1,0 +1,17 @@
+{
+  "id": "lesson-05-many-at-once",
+  "title": "Many at once",
+  "goal": "Draw a whole row without writing each shape by hand.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "construct:repeat",
+      "say": "Point at repeat. It runs the same line several times." },
+    { "do": "hover", "card": "construct:as",
+      "say": "Point at i. It counts 1, 2, 3 as the line repeats." },
+    { "do": "edit", "find": "repeat 3 as i", "replace": "repeat 5 as i",
+      "say": "Change 3 to 5 to draw five circles instead of three." },
+    { "do": "check",
+      "say": "You should see a row of five circles, evenly spaced." }
+  ]
+}

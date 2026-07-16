@@ -1,0 +1,21 @@
+{
+  "id": "lesson-02-change-the-numbers",
+  "title": "Change the numbers",
+  "goal": "Every number is a handle — change it and the picture changes.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "builtin:rect",
+      "say": "Point at the word rect. The card shows the box it draws." },
+    { "do": "hover", "card": "param:rect.width",
+      "say": "Point at width. How wide the box is, left to right." },
+    { "do": "edit", "find": "width: 80", "replace": "width: 160",
+      "say": "Drag the 80 up to 160 and watch the box grow wider." },
+    { "do": "hover", "card": "param:rect.fill",
+      "say": "Point at the color. That is the box's fill." },
+    { "do": "edit", "find": "fill: #E8A33D", "replace": "fill: #2A76C6",
+      "say": "Open the color and pick a blue." },
+    { "do": "check",
+      "say": "Your box should now be wide and blue, like the target." }
+  ]
+}

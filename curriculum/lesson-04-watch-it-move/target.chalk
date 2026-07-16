@@ -1,0 +1,5 @@
+paper(color: #FFFFFF)
+state x = 40
+every frame:
+  x = x + 6
+  circle(center: (x, 120), radius: 20, fill: #2A76C6)

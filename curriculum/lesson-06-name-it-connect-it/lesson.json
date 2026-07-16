@@ -1,0 +1,17 @@
+{
+  "id": "lesson-06-name-it-connect-it",
+  "title": "Name it, connect it",
+  "goal": "Give a number a name so many shapes can share it.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "construct:state",
+      "say": "Point at state. A name you give a number so you can reuse it." },
+    { "do": "name",
+      "say": "Click the 20 and choose name this number. Call it size." },
+    { "do": "connect",
+      "say": "Pick the 20 and the 40 together and choose connect. The 40 is size times two." },
+    { "do": "check",
+      "say": "Both circles now follow one number. Change size and both change." }
+  ]
+}

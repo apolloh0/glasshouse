@@ -1,0 +1,3 @@
+paper(color: #FFFFFF)
+circle(center: (110, 120), radius: 20, fill: #2A76C6)
+circle(center: (210, 120), radius: 40, fill: #E8A33D)

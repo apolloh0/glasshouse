@@ -1,0 +1,4 @@
+paper(color: #FFFFFF)
+state size = 20
+circle(center: (110, 120), radius: size, fill: #2A76C6)
+circle(center: (210, 120), radius: size * 2, fill: #E8A33D)

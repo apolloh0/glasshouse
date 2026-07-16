@@ -1,0 +1,19 @@
+{
+  "id": "lesson-04-watch-it-move",
+  "title": "Watch it move",
+  "goal": "A picture that changes each frame is how things move.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "construct:state",
+      "say": "Point at state. It remembers a number between frames." },
+    { "do": "hover", "card": "construct:every",
+      "say": "Point at every frame. This part runs again for each frame." },
+    { "do": "edit", "find": "x = x + 2", "replace": "x = x + 6",
+      "say": "Change 2 to 6 so the circle jumps further each frame." },
+    { "do": "scrub",
+      "say": "Drag the step slider to walk through the motion one frame at a time." },
+    { "do": "check",
+      "say": "The circle should race across faster than before." }
+  ]
+}

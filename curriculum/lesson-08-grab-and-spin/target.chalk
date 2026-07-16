@@ -1,0 +1,3 @@
+paper(color: #FFFFFF)
+group(rotate: 30, around: (160, 120)):
+  rect(left: 120, top: 100, width: 80, height: 40, fill: #2A76C6)

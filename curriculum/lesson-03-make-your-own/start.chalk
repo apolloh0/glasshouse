@@ -1,0 +1,2 @@
+paper(color: #FFFFFF)
+circle(center: (110, 120), radius: 40, fill: #2A76C6)

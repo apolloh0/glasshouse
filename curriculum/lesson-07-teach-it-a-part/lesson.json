@@ -1,0 +1,19 @@
+{
+  "id": "lesson-07-teach-it-a-part",
+  "title": "Teach it a part",
+  "goal": "Bundle a few shapes into one part you can place anywhere.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "construct:to",
+      "say": "Point at to. It teaches the program a new part with a name." },
+    { "do": "select",
+      "say": "Select the box and the roof together." },
+    { "do": "teach",
+      "say": "Choose teach this and name it house. The two shapes become one part." },
+    { "do": "open",
+      "say": "Choose open this up to watch the shapes come back out." },
+    { "do": "check",
+      "say": "The house looks the same, but now one line places a whole house." }
+  ]
+}

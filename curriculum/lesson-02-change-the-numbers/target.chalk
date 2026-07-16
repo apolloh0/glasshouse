@@ -1,0 +1,2 @@
+paper(color: #FFFFFF)
+rect(left: 120, top: 90, width: 160, height: 60, fill: #2A76C6)

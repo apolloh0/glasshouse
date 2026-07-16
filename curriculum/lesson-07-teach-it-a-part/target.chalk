@@ -1,0 +1,6 @@
+paper(color: #FFFFFF)
+to house(at: p):
+  rect(left: p.x, top: p.y, width: 60, height: 60, fill: #E8A33D)
+  triangle(a: (p.x, p.y), b: (p.x + 60, p.y), c: (p.x + 30, p.y - 40), fill: #C0392B)
+end
+house(at: (60, 140))
