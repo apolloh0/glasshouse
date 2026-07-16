@@ -12,7 +12,13 @@
     "bench": "PERF=1 vitest run bench",
     "typecheck": "tsc --noEmit",
     "grammar": "lezer-generator src/editor/chalk.grammar --typeScript -o src/editor/gen/chalk-parser.ts",
-    "dev:studio": "vite apps/studio"
+    "dev:studio": "vite apps/studio",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "exports": {
+    "./engine": "./dist/host/run.js",
+    "./ui": "./dist/ui/index.js",
+    "./editor": "./dist/editor/chalkLanguage.js"
   },
   "devDependencies": {
     "@lezer/generator": "^1.8.0",
