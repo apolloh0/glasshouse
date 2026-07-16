@@ -517,3 +517,16 @@ groups get an arc handle at their fixed point editing the rotate literal
 directly (D39 splice rules, identity pin). D44 stands untouched:
 inversion never solves through a matrix for an angle; computed rotations
 get no handle.
+
+**D62 — `src/ui/rotate.ts` imports `src/flow/transform` (first ui→flow edge,
+sanctioned by D61).** The architecture map lists src/ui as importing
+lang/engine/render/meta/util; rotate.ts is the first ui module to import
+src/flow. The D61 contract requires a group's fixed point, which is
+`around`'s literal when present (no matrix needed — the tested path) and
+otherwise `anchorOf(matrixFor(...))` from flow/transform. Duplicating that
+solve into ui would fork the D42 trig-rounding (matrixFor is one of the two
+pinned cos/sin sites; a third is exactly what D42 forbids), so rotate.ts
+imports flow/transform directly. layering.test.ts bans ui→host but not
+ui→flow, and flow is pure/DOM-free, so the edge is clean. Deliberate; if a
+later phase wants stricter layering, extract the anchor solve to a shared
+lower module.

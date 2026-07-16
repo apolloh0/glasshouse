@@ -78,6 +78,7 @@ import { callSitesFor } from "../../src/flow/stack.js";
 import { showValue } from "../../src/ui/format.js";
 import { announce, type AnnouncementKey } from "../../src/meta/announce.js";
 import { kstep, K_INITIAL, type KState, type KEffect } from "../../src/ui/keys.js";
+import { rotationHandles, type RotationHandle } from "../../src/ui/rotate.js";
 import { opBounds, thumbnailFit, valueGlyph } from "../../src/ui/glyphs.js";
 import { pathAt, children as childrenOf, type AnyNode } from "../../src/lang/walk.js";
 import type { Value } from "../../src/engine/values.js";
@@ -117,6 +118,10 @@ let session: Session | null = null;
 let isAnimated = false;
 let lastDisplay: DisplayList | null = null;
 let rafHandle = 0;
+// Re-pause thread (P6-T6, spec §2 / step 37): a drag committed while a frame
+// was focused re-focuses the SAME frame index after the rerun, instead of
+// resuming playback. Set at commit, consumed once by the next rebuild.
+let rePauseFrame: number | null = null;
 const idTracker = new IdTracker();
 
 // Phase 2: the focused frame (scrubber + timeline operate on it)
@@ -202,10 +207,21 @@ function rebuild(doc: string): void {
     isAnimated = program.frames.length > 0 || program.events.length > 0;
     selectedOps = null;
     const wasFocused = focused !== null;
+    const rePause = rePauseFrame;
+    rePauseFrame = null;
     focused = null;
     if (isAnimated) {
       scrubWrap.style.display = "none";
-      rafHandle = requestAnimationFrame(tick);
+      if (rePause !== null) {
+        // Keep the learner on the frame they were manipulating (D-repause).
+        session.advanceFrames(rePause + 1);
+        const k = Math.min(rePause, Math.max(0, session.frameCount() - 1));
+        frameSlider.max = String(Math.max(0, session.frameCount() - 1));
+        frameSlider.value = String(k);
+        focusFrame(k);
+      } else {
+        rafHandle = requestAnimationFrame(tick);
+      }
     } else {
       frameSlider.max = "0";
       frameSlider.value = "0";
@@ -292,6 +308,7 @@ function applyScrub(): void {
   render(focused.view.display, v.upToOp);
   overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
   drawHandles();
+  drawRotationHandles(); // P6-T6: on-stage angle widgets for literal rotates
   drawAxes(step); // plan 21: rotated frames while scrubbing inside a group
   view.dispatch({ effects: setCodeHighlight.of({ start: v.span.start, end: v.span.end }) });
   status.textContent =
@@ -667,6 +684,68 @@ function handleAt(x: number, y: number): ReturnType<typeof pointHandles>[number]
     if ((x - h.x) ** 2 + (y - h.y) ** 2 <= 64) return h;
   }
   return null;
+}
+
+// ---------- rotation handles (P6-T6 / step 36, D61) ----------
+// An on-stage angle WIDGET, not an inversion: each literal-rotate group gets
+// an arc at its fixed point with a knob at the current angle. Dragging the
+// knob maps the pointer's angle (clockwise-positive, y-down, D36) straight to
+// apply(deg) — one literal spliced, one undo step. Computed rotates get none.
+const ROT_R = 30;
+function rotHandles(): RotationHandle[] {
+  return lastGoodProgram ? rotationHandles(lastGoodProgram, view.state.doc.toString()) : [];
+}
+function knobPos(fx: number, fy: number, deg: number): { x: number; y: number } {
+  const rad = (deg * Math.PI) / 180;
+  return { x: fx + ROT_R * Math.cos(rad), y: fy + ROT_R * Math.sin(rad) };
+}
+function drawArcKnob(fx: number, fy: number, deg: number): void {
+  overlayCtx.strokeStyle = "#7a4ea3";
+  overlayCtx.fillStyle = "#7a4ea3";
+  overlayCtx.lineWidth = 1.5;
+  overlayCtx.beginPath();
+  overlayCtx.arc(fx, fy, ROT_R, 0, Math.PI * 2);
+  overlayCtx.stroke();
+  const k = knobPos(fx, fy, deg);
+  overlayCtx.beginPath();
+  overlayCtx.arc(k.x, k.y, 4, 0, Math.PI * 2);
+  overlayCtx.fill();
+}
+function drawRotationHandles(): void {
+  for (const h of rotHandles()) drawArcKnob(h.x, h.y, h.deg);
+}
+function rotationHandleAt(x: number, y: number): RotationHandle | null {
+  for (const h of rotHandles()) {
+    const k = knobPos(h.x, h.y, h.deg);
+    if ((x - k.x) ** 2 + (y - k.y) ** 2 <= 64) return h;
+  }
+  return null;
+}
+
+let rotDrag: { h: RotationHandle; edited: string } | null = null;
+function beginRotDrag(h: RotationHandle): void {
+  rotDrag = { h, edited: view.state.doc.toString() };
+}
+function rotDragMove(px: number, py: number): void {
+  if (!rotDrag) return;
+  const { h } = rotDrag;
+  const deg = Math.round((Math.atan2(py - h.y, px - h.x) * 180) / Math.PI);
+  rotDrag.edited = h.apply(deg);
+  renderEditedAt(rotDrag.edited);
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  drawArcKnob(h.x, h.y, deg);
+  showChip(deg + "°", px, py);
+}
+function endRotDrag(): void {
+  if (!rotDrag) return;
+  const { edited } = rotDrag;
+  if (focused && isAnimated) rePauseFrame = focused.k; // re-pause thread
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: edited },
+    userEvent: "input.rotate",
+  });
+  rotDrag = null;
+  chip.style.display = "none";
 }
 
 /** Plan 21: rotated axes while the scrubber sits inside a group —
@@ -1323,6 +1402,7 @@ function endOpDrag(): void {
   if (solve && solve.candidates.length > 0) {
     const k = opDrag.k % solve.candidates.length;
     const edited = applyCandidate(opDrag.source, lastGoodProgram, solve.candidates[k]!);
+    if (focused && isAnimated) rePauseFrame = focused.k; // re-pause thread
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: edited },
       userEvent: "input.drag",
@@ -1347,6 +1427,22 @@ window.addEventListener("keydown", (ev) => {
 
 stage.addEventListener("mousedown", (ev) => {
   const { x, y } = stagePos(ev);
+  // rotation knob wins first (P6-T6): a small target out on the arc, it maps
+  // pointer angle -> apply(deg) and never competes with a shape drag.
+  const rot = rotationHandleAt(x, y);
+  if (rot) {
+    ev.preventDefault();
+    beginRotDrag(rot);
+    const onMove = (m: MouseEvent): void => { const p = stagePos(m); rotDragMove(p.x, p.y); };
+    const onUp = (): void => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      endRotDrag();
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return;
+  }
   // point handles win over program input (plan 20)
   const handle = handleAt(x, y);
   if (handle) {
@@ -1428,6 +1524,7 @@ function kbSolve(opIndex: number, dx: number, dy: number, candidate: number): vo
 function kbCommit(): void {
   if (!kbDrag || !kbDrag.solve || !lastGoodProgram || kbDrag.solve.candidates.length === 0) return;
   const edited = applyCandidate(kbDrag.source, lastGoodProgram, kbDrag.solve.candidates[kbDrag.k]!);
+  if (focused && isAnimated) rePauseFrame = focused.k; // re-pause thread
   view.dispatch({
     changes: { from: 0, to: view.state.doc.length, insert: edited },
     userEvent: "input.drag",
