@@ -490,3 +490,30 @@ dropped, so nothing could have failed silently). The sole `decisions.md`
 (`c4c2864`, "D48 UNIFIED"), not a Phase 5 removal. **No 4b-era content required
 restoring** — the scaffold's silent strip was confined to `main.ts`, already
 fixed at `ac4111c`.
+
+**D57 — Announcements are vocabulary.** Everything a screen reader speaks
+comes from src/meta/announce.ts: pinned event templates composing card
+titles, values via showValue, total-coverage tested like cards, jargon-
+banned, <= 120 chars. The card schema gains no field; cards describe
+things, templates describe events. No inline strings in the studio —
+the Phase 1 invariant now covers speech.
+
+**D58 — Keyboard manipulation is a pure state machine.** src/ui/keys.ts
+maps keys to the same entry points the pointer uses; the keymap is pinned
+in its header and table-tested. The studio interprets effects and owns
+pacing only.
+
+**D59 — Still no browser automation.** The scriptable surface keyboard
+driving creates is the pure machine itself, vitest-covered; end-to-end
+runs remain human (gate AH). Post-1.0 revisit stands.
+
+**D60 — One package, three subpaths.** exports: ./engine (dependency-free
+core: lang, engine, render, host, flow), ./ui (meta, ui), ./editor
+(CodeMirror-coupled). Apps unpublished. Enforced by the layering tests
+plus a static import-graph walk from the engine entry. Closes D10.
+
+**D61 — Rotation handles are on-stage angle widgets.** Literal-rotate
+groups get an arc handle at their fixed point editing the rotate literal
+directly (D39 splice rules, identity pin). D44 stands untouched:
+inversion never solves through a matrix for an angle; computed rotations
+get no handle.

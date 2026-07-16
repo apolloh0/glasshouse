@@ -1544,3 +1544,14 @@ rebuild(houseRow);
 // 33. As ever: no transformation logic here. Unification, placement,
 //     folding, synthesis all live in src/ui/{gestures,synth}.ts with tests;
 //     this file dispatches text and paints chips.
+
+// P6 wiring (spec §1–2): 34. aria-live region fed ONLY by announce();
+// roles + labels composed from cards; op focus order = display order.
+// 35. Keyboard: route keydown through kstep(); interpret effects
+// (focusOp -> outline + announce; solveDrag -> the 4b drag-tick pipeline
+// at the machine's dx/dy/candidate; commit/cancel -> same paths as
+// pointer release/esc). 36. Rotation handles: draw arcs from
+// rotationHandles(); drag maps pointer angle -> apply(deg), one undo
+// step. 37. Re-pause: after committing a drag on an animated program,
+// re-focus the SAME frame index. No logic in this file — pacing and
+// pixels only.

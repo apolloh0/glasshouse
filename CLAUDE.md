@@ -22,6 +22,10 @@ inversion with honest disambiguation, trig determinism
 Phase 5: create by abstracting — the five output-preserving gestures
 (name/connect/repeat/teach/open) (`docs/phase5-spec.md`, tasks
 P5-T0..P5-T8, gates AA–AE).
+Phase 6: ship it — accessibility from the vocabulary registry, the pure
+keyboard machine, packaging (one package, three subpaths), the eight-
+lesson curriculum, rotation handles (`docs/phase6-spec.md`, tasks
+P6-T0..P6-T7, gates AF–AJ).
 **Phases are strictly ordered**: finish each phase's gates before starting
 the next; work each phase's tasks in order.
 
@@ -166,3 +170,8 @@ Do not reach for the compiler before the walker is proven too slow.
   (D56); unchanged code is span-spliced, never re-printed.
 - When something in the spec is ambiguous, pick the simplest interpretation,
   implement it, and record the choice in `docs/decisions.md` — do not stall.
+- Deltas are NEW FILES ONLY, permanently: designer changes to existing
+  files arrive as spec append-payloads you apply and verify, never as
+  shipped file copies (the Phase 5 strip rule).
+- Speech comes only from announce.ts, as words come only from cards.ts
+  and emitted text only from synth.ts.
