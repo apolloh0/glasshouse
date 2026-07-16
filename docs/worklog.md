@@ -513,3 +513,18 @@ handler, the chip, the invert import, __studio.opDrag) and left only the
 plan comments 28-33. Restored that wiring verbatim from commit 71b7b56 and
 re-verified the 4b op-drag live (ball drags x-only, y locked, 160->185).
 Reported to the reviewer.
+
+## P5-T7+T8 / Gates AA-AC — 2026-07-13
+Gate AA ✓ full suite 256 green (28 skipped = PERF dummies + skipped
+gesture bench when PERF unset); the five pre-existing goldens byte-
+identical to phase4b-gates, five-houses is the intended new fixture and
+byte-stable since P5-T0. Language frozen again: no gesture emits novel
+syntax (all within Chalk v1.1), so no new goldens beyond the fixture.
+Gate AB ✓ gestures.test.ts 19/19 — every gesture oracle-clean
+(serializeVisual), decline cases friendly + jargon-free, teach/open
+round trip byte-identical, untouched rows keep their ids.
+Gate AC ✓ PERF=1 (medians): nameThisNumber 0.07 ms, repeatThis x12
+0.10 ms, teachThis 0.06 ms — all vs 15 ms. Full four+-phase bench sweep
+green, no regression: parse+fast 2.13/100, instrumented 3.82/30,
+dragCandidates 0.073/3, drag tick 0.06/12.
+Gates AD (manual §5) and AE (human) pending — scripts presented.
