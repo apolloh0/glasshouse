@@ -494,3 +494,22 @@ DEFINITION HEADER (not the call) — rewritten to the first expr statement
 whose text begins with the needle. Both same class as the P3-T5/P1-T4
 needle collisions. Sweep otherwise clean (stmts, stmtOf, the equal-values
 lastIndexOf+len delta all resolve correctly).
+
+## P5-T6 — studio gestures + P4b restore — 2026-07-13
+Done: gesture bar (plan 28-33) — a number gets "name this" (>=2 numbers ->
+"connect these"); a multi-statement selection gets "repeat this" (when
+repeatThis accepts) and "teach this"; a user-def call gets "open this up".
+connect renders candidate preview chips; every applied gesture is ONE undo
+dispatch of span-spliced source (D50 identity pin). findRepeatRuns spans
+exposed via runSpans (the underline overlay itself is a Phase 6 polish).
+Verified live end to end: five-houses -> repeat -> 20 + (i-1)*55, picture
+held; teach hut -> open round-trips (members folded, def removed); name a
+number -> state size = 20; console clean.
+FINDING + FIX: the Phase 5 scaffold commit (055d872) MODIFIED apps/studio/
+main.ts despite spec §0 ("changes no implemented file") — it stripped 124
+lines of shipped, Gate-Y-passed P4b-T4 direct-manipulation wiring
+(beginOpDrag/opDragMove/endOpDrag, the op-drag mousedown branch, the TAB
+handler, the chip, the invert import, __studio.opDrag) and left only the
+plan comments 28-33. Restored that wiring verbatim from commit 71b7b56 and
+re-verified the 4b op-drag live (ball drags x-only, y locked, 160->185).
+Reported to the reviewer.

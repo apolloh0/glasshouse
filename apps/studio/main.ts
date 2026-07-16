@@ -66,6 +66,10 @@ import { activeGroupsAt, anchorOf, axesGlyph } from "../../src/flow/transform.js
 import { completionsAt, previewFor } from "../../src/ui/complete.js";
 import { paletteEntries } from "../../src/ui/palette.js";
 import { numberDragAt, pointHandles, widgetAt } from "../../src/ui/drag.js";
+import { applyCandidate, dragCandidates, type DragSolve } from "../../src/flow/invert.js";
+import {
+  connectNumbers, findRepeatRuns, nameThisNumber, openThisUp, repeatThis, teachThis,
+} from "../../src/ui/gestures.js";
 import {
   cellZoomMode, numericSummary, stridedSamples, valueCells, valuesForNode,
 } from "../../src/flow/cells.js";
@@ -199,6 +203,7 @@ function rebuild(doc: string): void {
       focusFrame(0, { keepScrubPosition: wasFocused });
     }
     renderPalette();
+    refreshGestures();
   } catch (e) {
     if (!(e instanceof ChalkError)) throw e;
     status.textContent = e.diagnostic.message; // stage keeps last good picture
@@ -921,10 +926,163 @@ function onSelection(): void {
     redraw();
   }
   if (focused) renderTimeline(); // cursor moving in/out of a loop swaps views
+  refreshGestures();             // Phase 5: affordances follow the selection
 }
 
 function redraw(): void {
   if (lastDisplay) render(lastDisplay);
+}
+
+// ---------- Phase 5: abstraction gestures (plan 28-33) ----------
+
+const gesturesEl = document.getElementById("gestures")!;
+const gestureChips = document.getElementById("gesturechips")!;
+
+/** Number literal at (or just before) the cursor. */
+function numberAt(pos: number): AnyNode | undefined {
+  if (!lastGoodProgram) return undefined;
+  const here = [...pathAt(lastGoodProgram, pos)].reverse().find((n) => n.kind === "number");
+  if (here) return here;
+  return pos > 0 ? [...pathAt(lastGoodProgram, pos - 1)].reverse().find((n) => n.kind === "number") : undefined;
+}
+
+/** Number literals fully inside a selection range, in source order. */
+function numbersInRange(from: number, to: number): AnyNode[] {
+  const out: AnyNode[] = [];
+  visitAll((n) => { if (n.kind === "number" && n.span.start >= from && n.span.end <= to) out.push(n); });
+  out.sort((a, b) => a.span.start - b.span.start);
+  return out;
+}
+
+/** Top-level statements overlapping a selection, in source order. */
+function statementsInRange(from: number, to: number): AnyNode[] {
+  const out: AnyNode[] = [];
+  if (lastGoodProgram) {
+    for (const item of lastGoodProgram.items) {
+      const isStmt = ["expr", "assign", "state", "repeat", "for", "if", "return", "group"].includes(item.kind);
+      if (isStmt && item.span.start < to && from < item.span.end) out.push(item as AnyNode);
+    }
+  }
+  return out;
+}
+
+/** A user-definition call statement at the cursor (for open-this-up). */
+function callStmtAt(pos: number): AnyNode | undefined {
+  if (!lastGoodProgram) return undefined;
+  return [...pathAt(lastGoodProgram, pos)].reverse().find(
+    (n) => n.kind === "expr" && n.expr.kind === "call" && lastGoodProgram!.defs.has(n.expr.callee));
+}
+
+function visitAll(fn: (n: AnyNode) => void): void {
+  if (!lastGoodProgram) return;
+  const stack: AnyNode[] = [...lastGoodProgram.items];
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    fn(n);
+    stack.push(...childrenOf(n));
+  }
+}
+
+function gestureButton(label: string, run: () => void): HTMLButtonElement {
+  const b = document.createElement("button");
+  b.className = "gest-btn";
+  b.textContent = label;
+  b.addEventListener("click", run);
+  return b;
+}
+
+/** Apply a gesture result as ONE undo step (plan 30); span-splicing keeps
+ *  untouched rows' ids (D50). Failures show the friendly reason. */
+function applyGesture(r: { ok: true; source: string; note: string } | { ok: false; reason: string }): void {
+  if (!r.ok) { status.textContent = r.reason; return; }
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: r.source },
+    userEvent: "input.gesture",
+  });
+  status.textContent = r.note;
+  view.focus();
+}
+
+function refreshGestures(): void {
+  gesturesEl.replaceChildren();
+  gestureChips.replaceChildren();
+  if (!lastGoodProgram) return;
+  const doc = view.state.doc.toString();
+  const sel = view.state.selection.main;
+  const nums = sel.empty ? [] : numbersInRange(sel.from, sel.to);
+  const stmts = statementsInRange(sel.from, sel.to);
+  const num = numberAt(sel.head);
+  const callStmt = callStmtAt(sel.head);
+
+  if (nums.length >= 2) {
+    gesturesEl.appendChild(gestureButton("connect these", () => offerConnect(nums[0]!, nums[1]!)));
+  } else if (num) {
+    gesturesEl.appendChild(gestureButton("name this number", () => {
+      const name = window.prompt("Name this number:");
+      if (name) applyGesture(nameThisNumber(doc, lastGoodProgram!, num.id, name));
+    }));
+  }
+  if (stmts.length >= 2) {
+    const ids = stmts.map((s) => s.id);
+    if (repeatThis(doc, lastGoodProgram, ids).ok) {
+      gesturesEl.appendChild(gestureButton("repeat this", () => applyGesture(repeatThis(doc, lastGoodProgram!, ids))));
+    }
+    gesturesEl.appendChild(gestureButton("teach this", () => {
+      const name = window.prompt("Name this part:");
+      if (name) applyGesture(teachThis(doc, lastGoodProgram!, ids, name));
+    }));
+  }
+  if (callStmt) {
+    gesturesEl.appendChild(gestureButton("open this up", () => applyGesture(openThisUp(doc, lastGoodProgram!, callStmt.id))));
+  }
+}
+
+/** Connect: name litA, then render each candidate as a preview chip (plan 29). */
+function offerConnect(litA: AnyNode, litB: AnyNode): void {
+  const name = window.prompt("Name the first number:");
+  if (!name || !lastGoodProgram) return;
+  const doc = view.state.doc.toString();
+  const r = connectNumbers(doc, lastGoodProgram, litA.id, litB.id, name);
+  gestureChips.replaceChildren();
+  if (!r.ok) { status.textContent = r.reason; return; }
+  for (const cand of r.candidates) {
+    const chipEl = document.createElement("div");
+    chipEl.className = "gest-chip";
+    const canvas = document.createElement("canvas");
+    canvas.width = 48; canvas.height = 36;
+    const preview = previewFor(cand.source, 42);
+    if (preview.ok) {
+      const fit = thumbnailFit(preview.display.ops, 48, 36, 2);
+      if (fit) {
+        const c2 = canvas.getContext("2d")!;
+        c2.setTransform(fit.scale, 0, 0, fit.scale, fit.dx, fit.dy);
+        renderOps(c2, preview.display.ops);
+        c2.setTransform(1, 0, 0, 1, 0, 0);
+      }
+    }
+    const label = document.createElement("span");
+    label.textContent = cand.note;
+    chipEl.append(canvas, label);
+    chipEl.addEventListener("click", () => { applyGesture(cand); gestureChips.replaceChildren(); });
+    gestureChips.appendChild(chipEl);
+  }
+}
+
+/** Run suggestions (plan 31): the spans findRepeatRuns accepts, for the
+ *  studio to underline. Kept as a model call; the decoration overlay is a
+ *  Phase 6 polish (the "repeat this" affordance already fires on selection). */
+function repeatRunSpans(): { from: number; to: number; count: number }[] {
+  if (!lastGoodProgram) return [];
+  const byId = new Map<number, AnyNode>();
+  visitAll((n) => byId.set(n.id, n));
+  return findRepeatRuns(lastGoodProgram).map((run) => {
+    const nodes = run.stmts.map((id) => byId.get(id)!).filter(Boolean);
+    return {
+      from: Math.min(...nodes.map((n) => n.span.start)),
+      to: Math.max(...nodes.map((n) => n.span.end)),
+      count: run.count,
+    };
+  });
 }
 
 // ---------- stage -> code (hit-test, highlight, annotate) ----------
@@ -1038,6 +1196,104 @@ stage.addEventListener("mousemove", (ev) => {
     clearHover();
   }
 });
+// ---------- Phase 4b: direct manipulation (op drags -> inversion) ----------
+// (restored — the Phase 5 scaffold had stripped this shipped P4b-T4 wiring.)
+
+const chip = document.createElement("div");
+chip.id = "dragchip";
+chip.style.cssText =
+  "position:fixed;z-index:20;background:#333;color:#fff;font:11px system-ui;" +
+  "padding:3px 7px;border-radius:4px;pointer-events:none;display:none;";
+document.body.appendChild(chip);
+let chipTimer = 0;
+
+let opDrag: {
+  opIndex: number;
+  sx: number; sy: number;
+  cx: number; cy: number;
+  k: number;
+  source: string;
+  solve: DragSolve | null;
+} | null = null;
+
+function beginOpDrag(opIndex: number, sx: number, sy: number): void {
+  opDrag = { opIndex, sx, sy, cx: sx, cy: sy, k: 0, source: view.state.doc.toString(), solve: null };
+}
+
+function renderEditedAt(source: string): void {
+  if (!focused) return;
+  const s = new Session(source, 42);
+  if (isAnimated) s.advanceFrames(focused.k + 1);
+  render(s.displayAt(focused.k));
+}
+
+const snap = (from: number, to: number): string =>
+  Number.isInteger(from) ? String(Math.round(to)) : String(Math.round(to * 10) / 10);
+
+function describeCand(solve: DragSolve, k: number): string {
+  const edits = solve.candidates[k]!.edits;
+  const body = edits.map((e) => e.from + " → " + snap(e.from, e.to)).join(", ");
+  const more = solve.candidates.length > 1 ? "  ·  TAB: alternatives" : "";
+  const lock = solve.unadjustable.length > 0 ? "  ·  " + solve.unadjustable.join("/") + " locked" : "";
+  return body + more + lock;
+}
+
+function showChip(text: string, cx: number, cy: number): void {
+  const rect = stage.getBoundingClientRect();
+  chip.textContent = text;
+  chip.style.left = rect.left + cx + 12 + "px";
+  chip.style.top = rect.top + cy - 8 + "px";
+  chip.style.display = "block";
+}
+
+function opDragMove(cx: number, cy: number): void {
+  if (!opDrag || !focused || !lastGoodProgram) return;
+  opDrag.cx = cx;
+  opDrag.cy = cy;
+  const dx = cx - opDrag.sx;
+  const dy = cy - opDrag.sy;
+  const ops = focused.view.display.ops;
+  const solve = dragCandidates(lastGoodProgram, focused.view, ops, opDrag.opIndex, dx, dy);
+  opDrag.solve = solve;
+  if (solve.candidates.length === 0) {
+    renderEditedAt(opDrag.source);
+    showChip(solve.unadjustable.length > 0 ? solve.unadjustable.join("/") + " locked" : "—", cx, cy);
+    return;
+  }
+  const k = opDrag.k % solve.candidates.length;
+  const edited = applyCandidate(opDrag.source, lastGoodProgram, solve.candidates[k]!);
+  renderEditedAt(edited);
+  showChip(describeCand(solve, k), cx, cy);
+}
+
+function endOpDrag(): void {
+  if (!opDrag || !lastGoodProgram) { opDrag = null; return; }
+  const solve = opDrag.solve;
+  if (solve && solve.candidates.length > 0) {
+    const k = opDrag.k % solve.candidates.length;
+    const edited = applyCandidate(opDrag.source, lastGoodProgram, solve.candidates[k]!);
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: edited },
+      userEvent: "input.drag",
+    });
+    window.clearTimeout(chipTimer);
+    chip.style.display = "block";
+    chipTimer = window.setTimeout(() => { chip.style.display = "none"; }, 3000);
+  } else {
+    chip.style.display = "none";
+  }
+  opDrag = null;
+}
+
+window.addEventListener("keydown", (ev) => {
+  if (!opDrag || ev.key !== "Tab" || !opDrag.solve) return;
+  ev.preventDefault();
+  if (opDrag.solve.candidates.length > 1) {
+    opDrag.k = (opDrag.k + 1) % opDrag.solve.candidates.length;
+    opDragMove(opDrag.cx, opDrag.cy);
+  }
+});
+
 stage.addEventListener("mousedown", (ev) => {
   const { x, y } = stagePos(ev);
   // point handles win over program input (plan 20)
@@ -1057,6 +1313,27 @@ stage.addEventListener("mousedown", (ev) => {
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return;
+  }
+  // Phase 4b (plan 23): every op is draggable on a FOCUSED frame — inversion
+  // works out which literals honestly cause the motion.
+  if (focused && lastGoodProgram) {
+    const opIndex = hitTest(x, y);
+    if (opIndex >= 0) {
+      ev.preventDefault();
+      beginOpDrag(opIndex, x, y);
+      const onMove = (m: MouseEvent): void => {
+        const p = stagePos(m);
+        opDragMove(p.x, p.y);
+      };
+      const onUp = (): void => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        endOpDrag();
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      return;
+    }
   }
   pointer.down = true;
   if (isAnimated) pendingEvents.push({ type: "pointer-pressed", x, y });
@@ -1080,6 +1357,47 @@ rebuild(houseRow);
   valuesAt: (pos: number) => valuesAtPos(pos),
   startCompletion: () => startCompletion(view),
   acceptCompletion: () => acceptCompletion(view),
+  // 4b op-drag driver (restored): script a drag at stage coords.
+  opDrag: (sx: number, sy: number, cx: number, cy: number, tabs = 0) => {
+    const opIndex = hitTest(sx, sy);
+    if (opIndex < 0 || !focused) return { hit: false };
+    beginOpDrag(opIndex, sx, sy);
+    opDragMove(cx, cy);
+    for (let i = 0; i < tabs; i++) {
+      if (opDrag && opDrag.solve && opDrag.solve.candidates.length > 1) {
+        opDrag.k = (opDrag.k + 1) % opDrag.solve.candidates.length;
+        opDragMove(cx, cy);
+      }
+    }
+    const solve = opDrag?.solve ?? null;
+    endOpDrag();
+    return { hit: true, unadjustable: solve?.unadjustable ?? [], candidates: solve?.candidates.length ?? 0 };
+  },
+  // Phase 5 gesture drivers (headless scripting for the manual/smoke checks).
+  gesture: (kind: string, arg?: string) => {
+    if (!lastGoodProgram) return { ok: false, reason: "no program" };
+    const doc = view.state.doc.toString();
+    const sel = view.state.selection.main;
+    let r: { ok: true; source: string; note: string } | { ok: false; reason: string };
+    if (kind === "name") {
+      const num = numberAt(sel.head);
+      if (!num) return { ok: false, reason: "no number at cursor" };
+      r = nameThisNumber(doc, lastGoodProgram, num.id, arg ?? "size");
+    } else if (kind === "repeat") {
+      r = repeatThis(doc, lastGoodProgram, statementsInRange(sel.from, sel.to).map((s) => s.id));
+    } else if (kind === "teach") {
+      r = teachThis(doc, lastGoodProgram, statementsInRange(sel.from, sel.to).map((s) => s.id), arg ?? "part");
+    } else if (kind === "open") {
+      const c = callStmtAt(sel.head);
+      if (!c) return { ok: false, reason: "no call at cursor" };
+      r = openThisUp(doc, lastGoodProgram, c.id);
+    } else {
+      return { ok: false, reason: "unknown gesture" };
+    }
+    if (r.ok) applyGesture(r);
+    return r.ok ? { ok: true, note: r.note } : { ok: false, reason: r.reason };
+  },
+  runSpans: () => repeatRunSpans(),
 };
 
 // ---------------------------------------------------------------------------

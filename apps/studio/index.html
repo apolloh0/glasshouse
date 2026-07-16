@@ -49,6 +49,18 @@
                border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.15);
                padding: 6px 8px; font: 11px ui-monospace, monospace;
                max-width: 260px; display: none; }
+    #gestures { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0;
+                min-height: 1.6em; }
+    .gest-btn { font-size: 11px; color: #1a4a7a; background: #eef4fb;
+                border: 1px solid #cbe0f5; border-radius: 10px; padding: 1px 9px;
+                cursor: pointer; }
+    .gest-btn:hover { background: #dceaf9; }
+    #gesturechips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .gest-chip { display: flex; flex-direction: column; align-items: center;
+                 gap: 2px; border: 1px solid #ddd; border-radius: 4px; padding: 4px;
+                 cursor: pointer; font-size: 10px; color: #444; }
+    .gest-chip:hover { border-color: #2a76c6; }
+    .cm-repeatRun { text-decoration: underline dotted #7a4ea3; }
     #palette { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0;
                border-top: 1px solid #eee; }
     .pal-entry { display: flex; flex-direction: column; align-items: center;
@@ -77,6 +89,8 @@
       <input id="scrubber" type="range" min="0" max="0" value="0" />
     </div>
     <div id="status"></div>
+    <div id="gestures"></div>
+    <div id="gesturechips"></div>
     <div id="statepanel"></div>
     <div id="palette"></div>
     <div id="timeline"></div>
