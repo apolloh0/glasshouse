@@ -77,6 +77,7 @@ import { diffDisplay } from "../../src/flow/diff.js";
 import { callSitesFor } from "../../src/flow/stack.js";
 import { showValue } from "../../src/ui/format.js";
 import { announce, type AnnouncementKey } from "../../src/meta/announce.js";
+import { kstep, K_INITIAL, type KState, type KEffect } from "../../src/ui/keys.js";
 import { opBounds, thumbnailFit, valueGlyph } from "../../src/ui/glyphs.js";
 import { pathAt, children as childrenOf, type AnyNode } from "../../src/lang/walk.js";
 import type { Value } from "../../src/engine/values.js";
@@ -1119,13 +1120,22 @@ function drawFocusOutline(): void {
   overlayCtx.restore();
 }
 
-function focusOp(i: number): void {
+/** Set + outline the focused op (no speech); returns it. Speech is a separate
+ *  step so the keyboard path can voice it through an announce EFFECT (D58)
+ *  while the standalone a11y hook voices it directly. */
+function setFocusedOp(i: number): DisplayOp | null {
   const ops = lastDisplay ? lastDisplay.ops : [];
-  if (ops.length === 0) { focusedOpIndex = null; say("focus.none", {}); return; }
+  if (ops.length === 0) { focusedOpIndex = null; return null; }
   focusedOpIndex = ((i % ops.length) + ops.length) % ops.length;
   drawFocusOutline();
-  const op = ops[focusedOpIndex]!;
-  say("focus.op", { kind: op.kind, index: focusedOpIndex + 1, count: ops.length });
+  return ops[focusedOpIndex]!;
+}
+
+function focusOp(i: number): void {
+  const op = setFocusedOp(i);
+  const ops = lastDisplay ? lastDisplay.ops : [];
+  if (!op) { say("focus.none", {}); return; }
+  say("focus.op", { kind: op.kind, index: (focusedOpIndex ?? 0) + 1, count: ops.length });
 }
 
 function hitTest(x: number, y: number): number {
@@ -1385,6 +1395,98 @@ stage.addEventListener("mouseup", (ev) => {
   if (isAnimated) pendingEvents.push({ type: "pointer-released", x, y });
 });
 stage.addEventListener("mouseleave", clearHover);
+
+// ---------- keyboard (spec §1/§7.3 step 35): keydown -> kstep -> effects ----------
+// The pure machine (src/ui/keys.ts, D58) decides every transition; the studio
+// only interprets its effects onto the SAME entry points the pointer uses
+// (dragCandidates / applyCandidate) and speaks via announce effects. No keymap
+// logic lives here. focusOp effects outline; announce effects are the ONE
+// voice, enriched with the op kind / count / candidate note the studio holds.
+let kbState: KState = K_INITIAL;
+let kbDrag: { source: string; solve: DragSolve | null; k: number } | null = null;
+const K_KEYS = new Set(["[", "]", "Enter", "Escape", "Tab",
+  "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
+
+function spokenNote(solve: DragSolve, k: number): string {
+  return solve.candidates[k]!.edits.map((e) => e.from + " to " + snap(e.from, e.to)).join(", ");
+}
+
+function kbSolve(opIndex: number, dx: number, dy: number, candidate: number): void {
+  if (!focused || !lastGoodProgram) return;
+  if (!kbDrag) kbDrag = { source: view.state.doc.toString(), solve: null, k: 0 };
+  const ops = focused.view.display.ops;
+  const solve = dragCandidates(lastGoodProgram, focused.view, ops, opIndex, dx, dy);
+  const k = solve.candidates.length ? candidate % solve.candidates.length : 0;
+  kbDrag.solve = solve;
+  kbDrag.k = k;
+  renderEditedAt(solve.candidates.length
+    ? applyCandidate(kbDrag.source, lastGoodProgram, solve.candidates[k]!)
+    : kbDrag.source);
+  drawFocusOutline();
+}
+
+function kbCommit(): void {
+  if (!kbDrag || !kbDrag.solve || !lastGoodProgram || kbDrag.solve.candidates.length === 0) return;
+  const edited = applyCandidate(kbDrag.source, lastGoodProgram, kbDrag.solve.candidates[kbDrag.k]!);
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: edited },
+    userEvent: "input.drag",
+  });
+}
+
+function kbCancel(): void {
+  if (kbDrag) renderEditedAt(kbDrag.source);
+  drawFocusOutline();
+}
+
+/** Enrich an announce effect's slots with what only the studio knows (the op
+ *  kind + count, the candidate note), then voice it through say(). */
+function sayK(key: string, slots: Record<string, unknown>): void {
+  const ops = lastDisplay ? lastDisplay.ops : [];
+  const op = focusedOpIndex !== null ? ops[focusedOpIndex] : undefined;
+  const s: Record<string, unknown> = { ...slots };
+  if (key === "focus.op" && op) {
+    s["kind"] = op.kind; s["count"] = ops.length; s["index"] = (focusedOpIndex ?? 0) + 1;
+  } else if (key === "drag.start" && op) {
+    s["kind"] = op.kind;
+  } else if (kbDrag?.solve && kbDrag.solve.candidates.length) {
+    if (key === "drag.candidate") {
+      s["note"] = spokenNote(kbDrag.solve, kbDrag.k);
+      s["index"] = kbDrag.k + 1; s["count"] = kbDrag.solve.candidates.length;
+    } else if (key === "drag.commit") {
+      s["note"] = "changed " + spokenNote(kbDrag.solve, kbDrag.k);
+    }
+  }
+  say(key as AnnouncementKey, s);
+}
+
+function playKEffects(effects: readonly KEffect[]): void {
+  for (const e of effects) {
+    if (e.kind === "focusOp") setFocusedOp(e.index);
+    else if (e.kind === "solveDrag") kbSolve(e.index, e.dx, e.dy, e.candidate);
+    else if (e.kind === "commit") kbCommit();
+    else if (e.kind === "cancel") kbCancel();
+    else if (e.kind === "announce") sayK(e.key, e.slots);
+  }
+  // Drag session ends when the machine returns to browse (after the batch, so
+  // the drag.commit / drag.cancel announce effect above still saw the solve).
+  if (kbState.mode === "browse") kbDrag = null;
+}
+
+function onKeyDown(ev: KeyboardEvent): void {
+  if (!K_KEYS.has(ev.key)) return;
+  // Typing in the editor, or a live mouse op-drag, owns the key.
+  if (document.activeElement && (document.activeElement as HTMLElement).closest?.("#editor")) return;
+  if (opDrag) return;
+  const opCount = lastDisplay ? lastDisplay.ops.length : 0;
+  const candCount = kbDrag?.solve ? kbDrag.solve.candidates.length : 1;
+  const r = kstep(kbState, { key: ev.key, shift: ev.shiftKey }, opCount, candCount);
+  if (r.effects.length === 0 && r.state === kbState) return; // nothing to do
+  ev.preventDefault();
+  kbState = r.state;
+  playKEffects(r.effects);
+}
+window.addEventListener("keydown", onKeyDown);
 
 // ---------- go ----------
 
