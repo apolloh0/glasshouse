@@ -1,0 +1,19 @@
+{
+  "id": "lesson-01-first-picture",
+  "title": "Read a picture",
+  "goal": "Every number on the screen tells you what it controls.",
+  "start": "start.chalk",
+  "target": "target.chalk",
+  "steps": [
+    { "do": "hover", "card": "builtin:circle",
+      "say": "Point at the word circle. The card tells you what it draws." },
+    { "do": "hover", "card": "param:circle.radius",
+      "say": "Point at radius. Distance from the middle to the edge." },
+    { "do": "hover", "card": "param:circle.fill",
+      "say": "Point at the color. That's the circle's fill." },
+    { "do": "edit", "find": "radius: 40", "replace": "radius: 80",
+      "say": "Change 40 to 80 and watch the circle grow." },
+    { "do": "check",
+      "say": "Your picture should now match the target: one big circle." }
+  ]
+}
