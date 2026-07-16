@@ -70,23 +70,28 @@
     .pal-entry:hover { border-color: #2a76c6; }
     .cm-completionPreview { display: block; border: 1px solid #eee; margin-top: 4px; }
     .cm-number-drag { cursor: ew-resize; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0;
+               margin: -1px; overflow: hidden; clip: rect(0 0 0 0);
+               white-space: nowrap; border: 0; }
   </style>
 </head>
 <body>
   <div id="editor"></div>
   <div id="right">
+    <div id="live" role="status" aria-live="polite" class="sr-only"></div>
     <div id="stagewrap">
-      <canvas id="stage" width="320" height="240"></canvas>
-      <canvas id="overlay" width="320" height="240"></canvas>
+      <canvas id="stage" width="320" height="240" role="application"
+              tabindex="0" aria-label="Drawing stage — the picture your program makes. Square brackets move between shapes; enter starts moving the shape in focus."></canvas>
+      <canvas id="overlay" width="320" height="240" aria-hidden="true"></canvas>
     </div>
     <div id="controls">
-      <input id="frameslider" type="range" min="0" max="0" value="0" />
+      <input id="frameslider" type="range" min="0" max="0" value="0" aria-label="frame" />
       <label><input type="checkbox" id="onion" /> onion</label>
       <label><input type="checkbox" id="trails" /> trails</label>
       <label><input type="checkbox" id="diff" /> diff</label>
     </div>
     <div id="scrubwrap" style="display:none">
-      <input id="scrubber" type="range" min="0" max="0" value="0" />
+      <input id="scrubber" type="range" min="0" max="0" value="0" aria-label="step" />
     </div>
     <div id="status"></div>
     <div id="gestures"></div>

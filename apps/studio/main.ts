@@ -76,6 +76,7 @@ import {
 import { diffDisplay } from "../../src/flow/diff.js";
 import { callSitesFor } from "../../src/flow/stack.js";
 import { showValue } from "../../src/ui/format.js";
+import { announce, type AnnouncementKey } from "../../src/meta/announce.js";
 import { opBounds, thumbnailFit, valueGlyph } from "../../src/ui/glyphs.js";
 import { pathAt, children as childrenOf, type AnyNode } from "../../src/lang/walk.js";
 import type { Value } from "../../src/engine/values.js";
@@ -99,6 +100,14 @@ const timeline = document.getElementById("timeline")!;
 const statePanel = document.getElementById("statepanel")!;
 const popover = document.getElementById("popover")!;
 const palette = document.getElementById("palette")!;
+const live = document.getElementById("live")!;
+
+/** The studio's ONE voice (spec §1, D57): every screen-reader utterance is
+ *  an announce() template written into the single #live aria-live region.
+ *  Nothing else writes #live; no UI string is composed outside announce(). */
+function say(key: AnnouncementKey, slots: Record<string, unknown>): void {
+  live.textContent = announce(key, slots);
+}
 
 // ---------- program / session state ----------
 
@@ -176,6 +185,7 @@ function tick(): void {
     // picture and say what went wrong; the lint gutter points at the span.
     if (!(e instanceof ChalkError)) throw e;
     status.textContent = e.diagnostic.message;
+    say("diagnostic", { message: e.diagnostic.message });
   }
 }
 
@@ -207,6 +217,7 @@ function rebuild(doc: string): void {
   } catch (e) {
     if (!(e instanceof ChalkError)) throw e;
     status.textContent = e.diagnostic.message; // stage keeps last good picture
+    say("diagnostic", { message: e.diagnostic.message });
   }
 }
 
@@ -1087,6 +1098,36 @@ function repeatRunSpans(): { from: number; to: number; count: number }[] {
 
 // ---------- stage -> code (hit-test, highlight, annotate) ----------
 
+// ---------- op focus (spec §1: focus order IS display order) ----------
+// Browsing walks lastDisplay.ops front-to-back — the same array the renderer
+// paints and hitTest indexes — so what a sighted user sees on top and what a
+// screen-reader user hears last are the one order. Driven by the keyboard
+// machine's focusOp effect (P6-T3) and exposed on __studio for the a11y gate.
+let focusedOpIndex: number | null = null;
+
+function drawFocusOutline(): void {
+  overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+  if (focusedOpIndex === null || !lastDisplay) return;
+  const op = lastDisplay.ops[focusedOpIndex];
+  if (!op) return;
+  const bb = opBounds([op]);
+  if (!bb) return;
+  overlayCtx.save();
+  overlayCtx.strokeStyle = "#2a76c6";
+  overlayCtx.lineWidth = 2;
+  overlayCtx.strokeRect(bb.x0 - 2, bb.y0 - 2, bb.x1 - bb.x0 + 4, bb.y1 - bb.y0 + 4);
+  overlayCtx.restore();
+}
+
+function focusOp(i: number): void {
+  const ops = lastDisplay ? lastDisplay.ops : [];
+  if (ops.length === 0) { focusedOpIndex = null; say("focus.none", {}); return; }
+  focusedOpIndex = ((i % ops.length) + ops.length) % ops.length;
+  drawFocusOutline();
+  const op = ops[focusedOpIndex]!;
+  say("focus.op", { kind: op.kind, index: focusedOpIndex + 1, count: ops.length });
+}
+
 function hitTest(x: number, y: number): number {
   if (!lastDisplay) return -1;
   const ops = lastDisplay.ops;
@@ -1357,6 +1398,10 @@ rebuild(houseRow);
   valuesAt: (pos: number) => valuesAtPos(pos),
   startCompletion: () => startCompletion(view),
   acceptCompletion: () => acceptCompletion(view),
+  // P6-T2 a11y: focus an op by display index, outline + speak it, and read
+  // back the one aria-live region (for the AH.1 VoiceOver gate).
+  focusOp: (i: number) => { focusOp(i); return { index: focusedOpIndex, live: live.textContent }; },
+  liveText: () => live.textContent,
   // 4b op-drag driver (restored): script a drag at stage coords.
   opDrag: (sx: number, sy: number, cx: number, cy: number, tabs = 0) => {
     const opIndex = hitTest(sx, sy);
