@@ -1,4 +1,4 @@
-# Glasshouse — Phases 0–5
+# Glasshouse — Phases 0–6
 
 The deterministic execution engine for **Glasshouse**, a learnable programming
 system in the spirit of Bret Victor's *Learnable Programming*, and **Chalk**,
@@ -46,14 +46,28 @@ preview live ("just this house" vs "the spacing between houses"); the
 edit snaps, preserves program identity, and lands where you pointed.
 Spec: `docs/phase4b-spec.md`.
 
+**Phase 5 creates by abstracting**: five output-preserving gestures — name a
+number, connect two numbers, repeat a run of identical shapes into a loop,
+teach a cluster as a reusable part, and open a part back up — each verified
+byte-identical before and after by the display oracle. Spec:
+`docs/phase5-spec.md`.
+
+**Phase 6 ships it**: everything reachable by every learner. Accessibility
+sourced from the one vocabulary registry (a single aria-live voice), a pure
+keyboard machine that drives manipulation and gestures with no pointer,
+packaging into one library with three subpaths (`./engine`, `./ui`,
+`./editor`), an eight-lesson curriculum, and on-stage rotation handles.
+Spec: `docs/phase6-spec.md`.
+
 ## Quickstart
 
     npm install
-    npm test           # red until implemented — the suite IS the spec
-    npm run bench      # perf gates (PERF=1), Phase 0 + editor loop
+    npm test           # the full suite — green; the suite IS the spec
+    npm run typecheck  # must stay green at every commit
+    npm run bench      # perf gates (PERF=1)
+    npm run build      # compile the publishable library into dist/
     npm run grammar    # regenerate the Lezer parser after editing chalk.grammar
-    npm run dev        # ugly three-pane debug UI (Phase 0, task T11)
-    npm run dev:studio # the Phase 1 studio (task P1-T8)
+    npm run dev:studio # the Glasshouse studio (editor + live stage)
 
 ## Where things live
 
@@ -64,6 +78,7 @@ Spec: `docs/phase4b-spec.md`.
     docs/phase4a-spec.md  Phase 4a spec: tasks P4a-T1..P4a-T9, gates Q-U
     docs/phase4b-spec.md  Phase 4b spec: tasks P4b-T0..P4b-T6, gates V-Z
     docs/phase5-spec.md   Phase 5 spec: tasks P5-T0..P5-T8, gates AA-AE
+    docs/phase6-spec.md   Phase 6 spec: tasks P6-T0..P6-T7, gates AF-AJ
     docs/decisions.md     ADR-lite log of decisions already made
     CLAUDE.md             working agreement for Claude Code
     src/lang              lexer, parser, AST (Chalk)

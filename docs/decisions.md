@@ -530,3 +530,29 @@ imports flow/transform directly. layering.test.ts bans ui→host but not
 ui→flow, and flow is pure/DOM-free, so the edge is clean. Deliberate; if a
 later phase wants stricter layering, extract the anchor solve to a shared
 lower module.
+
+**Gates AF–AJ — Phase 6 closed; Glasshouse v0.1.0 shipped (2026-07-16).**
+AF (regression): full suite 274 green / 28 skipped (PERF); goldens
+byte-identical since the Phase 5 close (empty diff); the full PERF sweep
+28/28, every budget cleared with headroom — the project's closing benchmark
+table is in docs/worklog.md. AG (suites + build): tests/phase6.test.ts
+18/18; `npm run build` clean; the engine-side dist (host/lang/engine/render/
+flow) carries no @codemirror/@lezer/editor import — the publishable-core
+boundary holds on built output as well as src. **AH (manual) — recorded
+PASS:** all six items — (1) VoiceOver browses ops and speaks the drag
+candidate + commit note, intelligible, no double-announce or voice overlap,
+latency under a beat; (2) the Gate Z house task completed keyboard-only;
+(3) lesson 1 walked exactly as written; (4) the lesson-08 rotation knob
+turns, pinwheel shows none; (5) an animated drag holds its focused frame;
+(6) every lesson target eyeballed, no mismatch. **AI (HUMAN) — recorded
+PASS:** one fresh non-programmer completed lessons 1–3 unaided in under 20
+minutes, thinking aloud. The stretch (a screen-reader user, or curtained
+lesson 1 by audio) was attempted; its outcome + verbatims are pending from
+the reviewer (does not gate AJ — the required AI passed). **AJ (ship):**
+tagged `v0.1.0`; CLAUDE.md and README titles bumped to Phases 0–6; the
+broken `npm run dev` (apps/debug retired at D40) removed from the quickstart
+and package.json; README quickstart tested from a fresh clone — install,
+test, typecheck, build all green. Phases 0–6 COMPLETE: every automated gate
+(A–C, D–F, H–K, M–O, Q–S, V–X, AA–AC, AF–AG) green; every human gate (G, L,
+P, U, Z, AD, AE, AH, AI) recorded PASS. Decisions D1–D62; suite 274 green /
+28 skipped. The environment ships.

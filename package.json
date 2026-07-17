@@ -5,7 +5,6 @@
   "type": "module",
   "description": "Phase 0 engine spike for the Glasshouse learnable programming system (Chalk language)",
   "scripts": {
-    "dev": "vite apps/debug",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:update": "UPDATE_GOLDEN=1 vitest run tests/golden",

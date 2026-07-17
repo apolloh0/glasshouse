@@ -1,4 +1,4 @@
-# CLAUDE.md — Glasshouse (Phases 0–5)
+# CLAUDE.md — Glasshouse (Phases 0–6)
 
 Phase 0: deterministic, replayable, instrumented interpreter for the Chalk
 language (`docs/phase0-spec.md`, tasks T1..T11, gates A–C).

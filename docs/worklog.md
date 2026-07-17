@@ -602,3 +602,28 @@ CLOSING BENCHMARK TABLE (PERF=1, medians, dev machine 2026-07-16):
 
 Gates AH (manual) and AI (HUMAN) — scripts presented, pending human.
 Gate AJ (ship, tag v0.1.0) — pending AI.
+
+## PROJECT CLOSE — Glasshouse v0.1.0 — 2026-07-16
+Gates AH (manual, 6/6) and AI (HUMAN, lessons 1–3 unaided < 20 min) recorded
+PASS; AI stretch attempted (outcome/verbatims pending, non-blocking).
+Gate AJ (ship): CLAUDE.md + README titles bumped to Phases 0–6; the dead
+`npm run dev` (apps/debug retired at D40) removed from the quickstart and
+package.json; README quickstart tested from a fresh clone (install / test /
+typecheck / build green); tagged v0.1.0.
+
+Phases 0–6 COMPLETE.
+- Automated gates green: A–C (Phase 0), D–F (1), H–K (2), M–O (3), Q–S (4a),
+  V–X (4b), AA–AC (5), AF–AG (6).
+- Human gates PASS: G, L, P, U, Z, AD, AE, AH, AI.
+- Tests: 274 passed / 28 skipped (PERF-gated). typecheck clean. build clean.
+- Decisions: D1–D62 in docs/decisions.md.
+- The closing benchmark table is in the P6-T7 entry above — every budget
+  cleared with headroom; Phase 6 added no engine work.
+- Package: one library, three subpaths (./engine dependency-free core, ./ui,
+  ./editor); apps/studio unpublished. The publishable-core import boundary is
+  proven on built dist as well as src.
+
+The environment ships. Post-1.0 candidates logged along the way: cross-frame
+provenance (D43's boundary), multi-diagnostic recovery (D15), Playwright
+(D59), retiring the D30→bind span convention. Nothing else planned — the repo
+is handed to its users.
