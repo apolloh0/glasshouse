@@ -2,6 +2,7 @@
   "name": "glasshouse",
   "version": "0.0.1",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "description": "Phase 0 engine spike for the Glasshouse learnable programming system (Chalk language)",
   "scripts": {

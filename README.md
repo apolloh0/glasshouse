@@ -103,3 +103,9 @@ implemented. Everything marked
 tests (purity, layering, grammar tolerance, card quality) are green from day
 one; milestone tests go green task by task. Work `docs/phase0-spec.md` fully,
 then `docs/phase1-spec.md`.
+
+## License
+
+- **Apache License 2.0** ([LICENSE](LICENSE)): everything in this repository except `docs/`.
+- **CC BY 4.0** ([LICENSE-docs](LICENSE-docs)): `docs/`.
+- **Not licensed:** the Glasshouse and Chalk names.

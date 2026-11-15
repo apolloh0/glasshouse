@@ -556,3 +556,13 @@ test, typecheck, build all green. Phases 0–6 COMPLETE: every automated gate
 (A–C, D–F, H–K, M–O, Q–S, V–X, AA–AC, AF–AG) green; every human gate (G, L,
 P, U, Z, AD, AE, AH, AI) recorded PASS. Decisions D1–D62; suite 274 green /
 28 skipped. The environment ships.
+
+**D63 — The repository goes public as a rewritten copy of its history
+(2026-11-15).** Every commit keeps its content, order and date under a new
+hash; `docs/history-map.tsv` maps each old hash to its new one. Two things
+differ: commits and the v0.1.0 tag carry the owner's GitHub noreply address
+and public name, apolloh0, and `.claude/settings.local.json`, a local
+tool-permissions file committed by mistake in the first nine commits and
+removed after, is gone from every commit. The tree at v0.1.0 is unchanged.
+The code is licensed Apache-2.0 (`LICENSE`) and `docs/` CC BY 4.0
+(`LICENSE-docs`). The private repository is kept as `glasshouse-dev`.
